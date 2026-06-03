@@ -240,6 +240,111 @@ def finalize_note(note: Path, ended_iso: str) -> bool:
     return write_note_atomic(note, new_text)
 
 
+def build_action_index(vault: Path) -> dict[str, dict[str, int]]:
+    """Walk collaboration/ and dead-ends/, aggregate by action name.
+
+    Returns {action_name: {"collaboration": N, "dead_ends": M}}.
+    Notes with status graduated or obsolete are excluded.
+    """
+    vault = Path(vault)
+    index: dict[str, dict[str, int]] = {}
+
+    def _scan(directory: Path, bucket: str) -> None:
+        if not directory.is_dir():
+            return
+        for p in directory.glob("*.md"):
+            fm = frontmatter.parse_frontmatter(p)
+            if fm.get("status") in ("graduated", "obsolete"):
+                continue
+            actions = fm.get("actions")
+            if isinstance(actions, str):
+                actions = [actions]
+            if not isinstance(actions, list):
+                continue
+            for a in actions:
+                if not isinstance(a, str) or not a:
+                    continue
+                entry = index.setdefault(a, {"collaboration": 0, "dead_ends": 0})
+                entry[bucket] += 1
+
+    _scan(vault / "collaboration", "collaboration")
+    _scan(vault / "dead-ends", "dead_ends")
+    return index
+
+
+def render_action_guards(vault: Path) -> str | None:
+    """Short summary of action guards for always-on SessionStart injection.
+
+    Returns None when there are no active guards.
+    """
+    index = build_action_index(vault)
+    if not index:
+        return None
+    lines = [
+        "### Action guards — check before acting",
+        "",
+        "Active observations guard these actions. When you think \"I need to do X\", "
+        "check if X matches one of these, and if so, read the matching notes "
+        "before taking the action.",
+        "",
+    ]
+    for action in sorted(index.keys()):
+        counts = index[action]
+        parts = []
+        if counts.get("collaboration", 0) > 0:
+            parts.append(f"{counts['collaboration']} collaboration")
+        if counts.get("dead_ends", 0) > 0:
+            parts.append(f"{counts['dead_ends']} dead-end")
+        lines.append(f"- **`{action}`** — {', '.join(parts)}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def list_tool_notes(vault: Path) -> list[tuple[str, str]]:
+    """Enumerate tools/*.md as (name, summary) tuples.
+
+    Name is frontmatter `name:` or falls back to filename stem.
+    Summary is frontmatter `summary:` or an empty string.
+    """
+    tools_dir = Path(vault) / "tools"
+    if not tools_dir.is_dir():
+        return []
+    out: list[tuple[str, str]] = []
+    for p in sorted(tools_dir.glob("*.md")):
+        if p.name.lower() == "readme.md":
+            continue
+        fm = frontmatter.parse_frontmatter(p)
+        name = fm.get("name") or p.stem
+        summary = fm.get("summary") or ""
+        if isinstance(name, str) and isinstance(summary, str):
+            out.append((name, summary))
+    return out
+
+
+def render_tool_notes(vault: Path) -> str | None:
+    """Short index of available tool notes for always-on SessionStart injection.
+
+    Returns None when no tool notes exist.
+    """
+    tools = list_tool_notes(vault)
+    if not tools:
+        return None
+    lines = [
+        "### Tool notes — read before first invocation",
+        "",
+        "Running mental models for specific tools. When about to use one "
+        "of these for the first time in this session, read the matching file.",
+        "",
+    ]
+    for name, summary in tools:
+        if summary:
+            lines.append(f"- **`{name}`** — {summary}")
+        else:
+            lines.append(f"- **`{name}`**")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _count(directory: Path, predicate) -> int:
     if not directory.is_dir():
         return 0
@@ -318,4 +423,13 @@ def render_vault_index(
     lines.append("")
     lines.append("**Capture commands:** " + ", ".join(LORE_COMMANDS) + ".")
     lines.append("")
+
+    tool_block = render_tool_notes(vault)
+    if tool_block:
+        lines.append(tool_block)
+
+    guard_block = render_action_guards(vault)
+    if guard_block:
+        lines.append(guard_block)
+
     return "\n".join(lines)
