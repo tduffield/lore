@@ -158,7 +158,7 @@ denylist (`~/.claude/leak-gate.denylist`, untracked) so no private token lives
 in this tracked repo:
 
 ```bash
-forge/plugins/forge/scripts/install-hooks.sh "$(pwd)" plugins/lore
+forge/plugins/forge/scripts/install-hooks.sh "$(pwd)" plugins/lore tests
 ```
 
 See `MANUAL-SMOKE.md` for the plugin-system boundary smoke test (hook
