@@ -26,7 +26,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import sessions  # noqa: E402
-from sessions import finalize_note, write_note_atomic  # noqa: E402
+from sessions import (  # noqa: E402
+    finalize_note,
+    is_skeleton_body,
+    sweep_orphan_skeletons,
+    write_note_atomic,
+)
 from vault import resolve_vault  # noqa: E402
 
 
@@ -76,7 +81,12 @@ def vault_is_git_toplevel(vault: Path) -> bool:
         return False
 
 
-def commit_vault(vault: Path, worktree_name: str, note_paths: list[Path]) -> None:
+def commit_vault(
+    vault: Path,
+    worktree_name: str,
+    note_paths: list[Path],
+    deleted_paths: list[Path],
+) -> None:
     if not vault_is_git_toplevel(vault):
         print(
             "finalize-session-note: vault is not its own git toplevel "
@@ -91,6 +101,13 @@ def commit_vault(vault: Path, worktree_name: str, note_paths: list[Path]) -> Non
 
     for note in note_paths:
         git(vault, "add", "--", str(note))
+    for deleted in deleted_paths:
+        git(vault, "add", "--", str(deleted))
+
+    rc, staged_out, _ = git(vault, "diff", "--cached", "--name-only")
+    if rc != 0 or not staged_out.strip():
+        return
+
     subject = f"session: finalize {worktree_name}"
     rc, _, stderr = git(vault, "commit", "-m", subject)
     if rc != 0:
@@ -115,15 +132,28 @@ def main() -> int:
         return 0
 
     now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    finalized_notes: list[Path] = []
+    deleted_notes: list[Path] = []
     for note in notes:
         try:
-            finalize_note(note, now_iso)
+            if is_skeleton_body(note):
+                note.unlink()
+                deleted_notes.append(note)
+            else:
+                finalize_note(note, now_iso)
+                finalized_notes.append(note)
         except Exception as e:  # noqa: BLE001
             print(f"finalize-session-note: {note.name}: {type(e).__name__}: {e}",
                   file=sys.stderr)
 
     try:
-        commit_vault(vault, worktree_name, notes)
+        swept = sweep_orphan_skeletons(vault, exclude=set(notes))
+        deleted_notes.extend(swept)
+    except Exception as e:  # noqa: BLE001
+        print(f"finalize-session-note: sweep: {type(e).__name__}: {e}", file=sys.stderr)
+
+    try:
+        commit_vault(vault, worktree_name, finalized_notes, deleted_notes)
     except Exception as e:  # noqa: BLE001
         print(f"finalize-session-note: commit: {type(e).__name__}: {e}", file=sys.stderr)
 

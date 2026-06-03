@@ -24,6 +24,9 @@ from pathlib import Path
 
 import frontmatter
 
+# Statuses that mean a session note is already finalized — do not re-stamp.
+_TERMINAL_STATUSES = frozenset(("complete", "shelved", "finalized", "handoff"))
+
 # Reuse an existing session note for the same worktree if it was touched within
 # this many seconds — covers Claude Code restarts/crashes mid-session.
 RESUME_WINDOW_SECONDS = 30 * 60
@@ -90,6 +93,73 @@ def all_session_notes_for_worktree(vault: Path, worktree_name: str) -> list[Path
         (p for p in sessions_dir.glob("*.md") if _is_note_for_worktree(p, worktree_name)),
         reverse=True,
     )
+
+
+def is_skeleton_body(note: Path) -> bool:
+    """Return True if the note body is still the untouched skeleton template.
+
+    A skeleton contains only the title line, the "Started …" line, section
+    headings, single-line HTML comment placeholders, and blank lines — no real
+    content was ever appended.
+    """
+    try:
+        text = note.read_text()
+    except Exception:
+        return False
+    if not text.startswith("---"):
+        return False
+    end = text.find("\n---", 3)
+    if end < 0:
+        return False
+    body = text[end + 4:]  # skip past closing "\n---"
+
+    for raw in body.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("# Session:"):
+            continue
+        if line.startswith("Started ") and "on branch" in line:
+            continue
+        if line.startswith("## ") or line.startswith("### "):
+            continue
+        if line.startswith("<!--") and line.endswith("-->"):
+            continue
+        return False
+    return True
+
+
+def sweep_orphan_skeletons(vault: Path, exclude: set[Path]) -> list[Path]:
+    """Delete untouched skeleton notes from other worktrees before the vault commit.
+
+    Only notes older than `RESUME_WINDOW_SECONDS` are eligible — newer skeletons
+    may belong to a sibling worktree that is still bootstrapping.
+
+    Returns the list of paths actually deleted (so callers can stage them).
+    """
+    sessions_dir = Path(vault) / "sessions"
+    if not sessions_dir.is_dir():
+        return []
+    now = time.time()
+    deleted: list[Path] = []
+    for note in sessions_dir.glob("*.md"):
+        if note in exclude:
+            continue
+        try:
+            if now - note.stat().st_mtime < RESUME_WINDOW_SECONDS:
+                continue
+        except Exception:
+            continue
+        try:
+            if is_skeleton_body(note):
+                note.unlink()
+                deleted.append(note)
+        except Exception as e:
+            print(
+                f"sessions: sweep {note.name}: {type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
+    return deleted
 
 
 def _session_body() -> str:
@@ -215,7 +285,7 @@ def finalize_note(note: Path, ended_iso: str) -> bool:
         stripped = line.strip()
         if stripped.startswith("status:"):
             current = stripped.split(":", 1)[1].strip().strip('"').strip("'")
-            if current in ("complete", "shelved"):
+            if current in _TERMINAL_STATUSES:
                 return False
             break
 
