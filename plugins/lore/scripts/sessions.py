@@ -22,6 +22,7 @@ import tempfile
 import time
 from pathlib import Path
 
+import config
 import frontmatter
 
 # Statuses that mean a session note is already finalized — do not re-stamp.
@@ -469,6 +470,13 @@ def render_vault_index(
 
     if warning:
         lines.append(f"**Warning:** {warning}")
+        lines.append("")
+
+    if not config.RECALL_CLASSIFIER_ENABLED:
+        lines.append(
+            "**Note:** Mid-conversation subsystem recall is not active "
+            "(classifier deferred). Branch/keyword recall fires at SessionStart only."
+        )
         lines.append("")
 
     if session_note is not None:
