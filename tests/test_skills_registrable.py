@@ -48,6 +48,7 @@ def test_all_capture_and_ritual_skills_present():
     expected = {
         "defer", "dead-end", "decision", "radar", "subsystem",
         "checkpoint", "finished", "vault-sync", "ping",
+        "reflect",
     }
     missing = expected - names
     assert not missing, f"expected skills missing from the plugin: {sorted(missing)}"
