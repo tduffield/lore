@@ -1,0 +1,321 @@
+"""Shared session-note lifecycle logic for the lore plugin.
+
+Importable by the SessionStart and WorktreeRemove hooks, the `lore` CLI, and
+tests. Every function takes the resolved vault path explicitly — there is no
+module-global vault. Reuses the frontmatter parser from this package's
+`frontmatter` module.
+
+Responsibilities:
+  - ensure_session_note: create-or-resume the per-worktree session note
+  - session_note_path / all_session_notes_for_worktree: worktree-scoped finders
+  - write_note_atomic: crash-safe file write (temp + os.replace)
+  - finalize_note: set status: complete + ended: on a session note
+  - get_vault_stats: lightweight counts for the SessionStart index
+  - render_vault_index: the always-emitted baseline context block
+"""
+from __future__ import annotations
+
+import os
+import re
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+import frontmatter
+
+# Reuse an existing session note for the same worktree if it was touched within
+# this many seconds — covers Claude Code restarts/crashes mid-session.
+RESUME_WINDOW_SECONDS = 30 * 60
+
+# The capture skills (lore new …) backlink into these session-note headings, so
+# they are load-bearing — keep all five.
+REQUIRED_SECTIONS = ("What we did", "Decided", "Deferred", "Learned", "Open questions")
+
+# Slash commands surfaced in the baseline index so the model is reminded the
+# capture primitives exist.
+LORE_COMMANDS = (
+    "`/lore:defer`",
+    "`/lore:dead-end`",
+    "`/lore:decision`",
+    "`/lore:radar`",
+    "`/lore:subsystem`",
+)
+
+
+def _filename_stamp(now_iso: str) -> str:
+    """Render `YYYY-MM-DDTHH:MM…` → `YYYY-MM-DD-HHMM`."""
+    head = now_iso[:16]  # YYYY-MM-DDTHH:MM
+    date_part, _, time_part = head.partition("T")
+    return f"{date_part}-{time_part.replace(':', '')}"
+
+
+# Matches the mandatory timestamp prefix YYYY-MM-DD-HHMM in a session note stem.
+_STEM_PREFIX_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{4}-(.+)$")
+
+
+def _worktree_from_stem(stem: str) -> str | None:
+    """Extract the worktree name from a session note stem.
+
+    Stem format: ``YYYY-MM-DD-HHMM-<worktree>``.  Returns None if the stem
+    does not match the expected format.
+    """
+    m = _STEM_PREFIX_RE.match(stem)
+    return m.group(1) if m else None
+
+
+def _is_note_for_worktree(path: Path, worktree_name: str) -> bool:
+    """True iff the note's stem encodes exactly ``worktree_name``."""
+    wt = _worktree_from_stem(path.stem)
+    return wt == worktree_name
+
+
+def session_note_path(vault: Path, worktree_name: str) -> Path | None:
+    """Return the newest session note for this worktree, or None."""
+    sessions_dir = Path(vault) / "sessions"
+    if not sessions_dir.is_dir():
+        return None
+    for p in sorted(sessions_dir.glob("*.md"), reverse=True):
+        if _is_note_for_worktree(p, worktree_name):
+            return p
+    return None
+
+
+def all_session_notes_for_worktree(vault: Path, worktree_name: str) -> list[Path]:
+    """Return every session note matching this worktree, newest first."""
+    sessions_dir = Path(vault) / "sessions"
+    if not sessions_dir.is_dir():
+        return []
+    return sorted(
+        (p for p in sessions_dir.glob("*.md") if _is_note_for_worktree(p, worktree_name)),
+        reverse=True,
+    )
+
+
+def _session_body() -> str:
+    return (
+        "## What we did\n"
+        "<!-- Append as work happens. -->\n\n"
+        "## Decided\n"
+        "<!-- Non-obvious decisions. Each is or becomes a decisions/ note. -->\n\n"
+        "## Deferred\n"
+        "<!-- Links to deferred/ notes created in this session. -->\n\n"
+        "## Learned\n"
+        "<!-- Gotchas, subsystem corrections, links to dead-ends/ notes. -->\n\n"
+        "## Open questions\n"
+        "<!-- Unresolved threads. -->\n"
+    )
+
+
+def ensure_session_note(
+    vault: Path,
+    worktree_name: str,
+    branch: str,
+    project: str,
+    now_iso: str,
+    now_human: str,
+    session_id: str = "",
+) -> tuple[Path, bool]:
+    """Create-or-resume a session note for this worktree.
+
+    Filename: `YYYY-MM-DD-HHMM-<worktree>.md`. If a prior note for this
+    worktree was modified within `RESUME_WINDOW_SECONDS`, reuse it; otherwise
+    create a fresh note. Returns (path, created).
+    """
+    vault = Path(vault)
+    sessions_dir = vault / "sessions"
+    try:
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    existing = session_note_path(vault, worktree_name)
+    if existing is not None:
+        try:
+            age = time.time() - existing.stat().st_mtime
+        except Exception:
+            age = float("inf")
+        if age < RESUME_WINDOW_SECONDS:
+            return existing, False
+
+    new_path = sessions_dir / f"{_filename_stamp(now_iso)}-{worktree_name}.md"
+    sid_line = f"session_id: {session_id}\n" if session_id else "session_id:\n"
+    content = (
+        "---\n"
+        "type: session\n"
+        f"project: {project}\n"
+        f"worktree: {worktree_name}\n"
+        f"branch: {branch}\n"
+        f"started: {now_iso}\n"
+        "ended:\n"
+        "subsystems: []\n"
+        "phase: Orient\n"
+        f"{sid_line}"
+        "status: active\n"
+        "---\n\n"
+        f"# Session: {worktree_name}\n\n"
+        f"Started {now_human} on branch `{branch}` in project `{project}`.\n\n"
+        + _session_body()
+    )
+    try:
+        new_path.write_text(content)
+        return new_path, True
+    except Exception:
+        return new_path, False
+
+
+def write_note_atomic(note: Path, text: str) -> bool:
+    """Write *text* to *note* atomically via a temp file + os.replace.
+
+    A crash before the replace leaves the original intact and cleans up the
+    temp file. Returns True on success, False on failure.
+    """
+    note = Path(note)
+    tmp_path: str | None = None
+    try:
+        fd, tmp_path = tempfile.mkstemp(
+            dir=str(note.parent), prefix=f".{note.name}.", suffix=".tmp"
+        )
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.replace(tmp_path, note)
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"sessions: write_note_atomic {note.name}: {type(e).__name__}: {e}",
+              file=sys.stderr)
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+        return False
+
+
+def finalize_note(note: Path, ended_iso: str) -> bool:
+    """Set status: complete + ended: on a session note.
+
+    Returns False (no-op) if the note is already terminal or has no
+    frontmatter. Writes atomically so a mid-write crash leaves the original
+    intact.
+    """
+    try:
+        text = note.read_text()
+    except Exception:
+        return False
+    if not text.startswith("---"):
+        return False
+    end = text.find("\n---", 3)
+    if end < 0:
+        return False
+    fm_text = text[3:end]
+    body = text[end:]
+    fm_lines = fm_text.splitlines()
+
+    for line in fm_lines:
+        stripped = line.strip()
+        if stripped.startswith("status:"):
+            current = stripped.split(":", 1)[1].strip().strip('"').strip("'")
+            if current in ("complete", "shelved"):
+                return False
+            break
+
+    new_fm_lines: list[str] = []
+    status_seen = ended_seen = False
+    for line in fm_lines:
+        stripped = line.strip()
+        if stripped.startswith("status:"):
+            new_fm_lines.append("status: complete")
+            status_seen = True
+        elif stripped.startswith("ended:"):
+            new_fm_lines.append(f"ended: {ended_iso}")
+            ended_seen = True
+        else:
+            new_fm_lines.append(line)
+    if not status_seen:
+        new_fm_lines.append("status: complete")
+    if not ended_seen:
+        new_fm_lines.append(f"ended: {ended_iso}")
+
+    new_text = "---" + "\n".join(new_fm_lines) + body
+    return write_note_atomic(note, new_text)
+
+
+def _count(directory: Path, predicate) -> int:
+    if not directory.is_dir():
+        return 0
+    return sum(
+        1 for p in directory.glob("*.md") if predicate(frontmatter.parse_frontmatter(p))
+    )
+
+
+def get_vault_stats(vault: Path) -> dict:
+    """Lightweight counts for the SessionStart baseline index. Never raises."""
+    vault = Path(vault)
+    stats = {
+        "subsystems": 0,
+        "open_deferred": 0,
+        "dead_ends": 0,
+        "active_lessons": 0,
+        "sessions": 0,
+    }
+    if not vault.exists():
+        return stats
+    stats["subsystems"] = _count(vault / "subsystems", lambda fm: True)
+    stats["open_deferred"] = _count(
+        vault / "deferred",
+        lambda fm: fm.get("type") == "deferred"
+        and fm.get("status") in ("open", "scheduled", "resurfaced"),
+    )
+    stats["dead_ends"] = _count(
+        vault / "dead-ends", lambda fm: fm.get("type") == "dead-end"
+    )
+    stats["active_lessons"] = _count(
+        vault / "lessons",
+        lambda fm: fm.get("type") == "lesson" and fm.get("status", "active") == "active",
+    )
+    stats["sessions"] = _count(
+        vault / "sessions", lambda fm: fm.get("type") == "session"
+    )
+    return stats
+
+
+def render_vault_index(
+    vault: Path,
+    worktree_name: str,
+    project: str,
+    session_note: Path | None,
+    session_created: bool,
+    warning: str | None = None,
+) -> str:
+    """Build the always-emitted baseline context block."""
+    vault = Path(vault)
+    stats = get_vault_stats(vault)
+    lines: list[str] = [f"## Lore vault — {worktree_name} ({project})", ""]
+
+    if warning:
+        lines.append(f"**Warning:** {warning}")
+        lines.append("")
+
+    if session_note is not None:
+        try:
+            rel = session_note.relative_to(vault)
+        except ValueError:
+            rel = session_note.name
+        verb = "created" if session_created else "resumed"
+        lines.append(
+            f"**Session note:** `{rel}` ({verb} for this worktree). "
+            "Append progress as work happens."
+        )
+        lines.append("")
+
+    lines.append(
+        f"**Vault state:** {stats['subsystems']} subsystem profiles · "
+        f"{stats['open_deferred']} open deferred · "
+        f"{stats['dead_ends']} dead-ends · "
+        f"{stats['active_lessons']} active lessons · "
+        f"{stats['sessions']} session notes"
+    )
+    lines.append("")
+    lines.append("**Capture commands:** " + ", ".join(LORE_COMMANDS) + ".")
+    lines.append("")
+    return "\n".join(lines)
