@@ -158,8 +158,18 @@ denylist (`~/.claude/leak-gate.denylist`, untracked) so no private token lives
 in this tracked repo:
 
 ```bash
-forge/plugins/forge/scripts/install-hooks.sh "$(pwd)" plugins/lore tests
+forge/plugins/forge/scripts/install-hooks.sh "$(pwd)" plugins/lore tests docs
 ```
+
+The `docs` tree is included so adopter-facing docs (e.g. `EXTENDING.md`) are
+gated too — they ship publicly and must stay leak-clean.
 
 See `MANUAL-SMOKE.md` for the plugin-system boundary smoke test (hook
 registration, `${CLAUDE_PLUGIN_ROOT}`, skill namespacing).
+
+## Extending lore for your project
+
+To bolt your own project layer on top of lore and the forge dev agents — wiring
+forge's extension points (feature flags, issue tracker, observability, test
+commands) to your own stack — see the adopter cookbook in
+[`docs/EXTENDING.md`](docs/EXTENDING.md).
