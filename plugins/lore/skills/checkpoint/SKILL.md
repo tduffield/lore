@@ -15,14 +15,15 @@ Persists in-context state into the session note *now* so it survives `/clear` or
 lore stats  # confirms vault + worktree
 ```
 
-Find the active session note:
+Find the active session note (resolves this session's note by id, falling back
+to the worktree name — prints a vault-relative path):
 ```bash
-ls "$LORE_VAULT/sessions/" | grep "$(basename $PWD)$" | sort | tail -1
+lore session-note
 ```
 
 Read it:
 ```bash
-cat "$LORE_VAULT/sessions/<note-name>"
+cat "$LORE_VAULT/$(lore session-note)"
 ```
 
 Check frontmatter `status`. If already `complete` or `shelved`: stop and tell the user.
@@ -62,7 +63,7 @@ Trivial checkpoints (≤3 total bullets, all in `What we did`) may fast-path wit
 For each section with new content:
 
 ```bash
-lore patch "$LORE_VAULT/sessions/<note-name>" "<Section>" --text "<bullets>"
+lore patch "$LORE_VAULT/$(lore session-note)" "<Section>" --text "<bullets>"
 ```
 
 One call per section. Do NOT touch frontmatter. Do NOT touch sections reserved for `/finished` (mini retrospective, open questions unless you have new ones).
