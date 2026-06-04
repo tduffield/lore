@@ -11,9 +11,39 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Iterator
 
 # Strip control characters (incl. newlines/tabs) from user-provided strings.
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def iter_note_paths(directory: Path, recursive: bool = False) -> Iterator[Path]:
+    """Yield ``.md`` notes in *directory*.
+
+    Flat by default (top-level ``*.md`` only). When *recursive* is True, also
+    descends exactly one level into ``YYYY-MM/`` month buckets (``*/*.md``) —
+    the date-bucketed archive layout. Files and directories whose name starts
+    with ``_`` (e.g. ``_index.md``, ``_test/``, ``_archive/``) are always
+    skipped. Recursion is deliberately bounded to one level (not ``rglob``) so
+    deeper or special dirs are never descended.
+
+    Only the in-scope folders (sessions/plans/specs/designs) pass
+    ``recursive=True``; the living folders (deferred/dead-ends/lessons/radar)
+    stay flat.
+    """
+    directory = Path(directory)
+    if not directory.is_dir():
+        return
+    for md in directory.glob("*.md"):
+        if not md.name.startswith("_"):
+            yield md
+    if recursive:
+        for sub in directory.iterdir():
+            if not sub.is_dir() or sub.name.startswith("_"):
+                continue
+            for md in sub.glob("*.md"):
+                if not md.name.startswith("_"):
+                    yield md
 
 
 def resolve_vault() -> str:
@@ -122,7 +152,8 @@ def find_session_note(vault: Path, worktree_name: str | None = None) -> Path | N
         return _worktree_from_stem(p.stem) == worktree_name
 
     notes = sorted(
-        (p for p in sessions_dir.glob("*.md") if _is_candidate(p)),
+        (p for p in iter_note_paths(sessions_dir, recursive=True) if _is_candidate(p)),
+        key=lambda p: p.name,
         reverse=True,
     )
     return notes[0] if notes else None

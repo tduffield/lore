@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 import frontmatter as fm_module
+from vault import iter_note_paths
 
 
 def derive_subsystem_keywords(vault: Path) -> dict[str, list[str]]:
@@ -62,13 +63,20 @@ def infer_subsystems(vault: Path, branch: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def _find_notes(
-    directory: Path, predicate: Callable[[dict], bool]
+    directory: Path,
+    predicate: Callable[[dict], bool],
+    recursive: bool = False,
 ) -> list[tuple[Path, dict]]:
-    """Return (path, frontmatter) pairs matching predicate, sorted by name."""
+    """Return (path, frontmatter) pairs matching predicate, sorted by name.
+
+    Flat by default — only the sessions call passes ``recursive=True`` to descend
+    into ``YYYY-MM/`` buckets. The living folders (deferred/dead-ends/lessons)
+    stay flat.
+    """
     if not directory.is_dir():
         return []
     hits: list[tuple[Path, dict]] = []
-    for md in sorted(directory.glob("*.md")):
+    for md in sorted(iter_note_paths(directory, recursive=recursive)):
         parsed = fm_module.parse_frontmatter(md)
         if predicate(parsed):
             hits.append((md, parsed))
@@ -174,7 +182,7 @@ def _recent_sessions(
             and _has_overlap(parsed.get("subsystems"), sub_set)
             and _matches_project(parsed, project)
         )
-    hits = _find_notes(vault / "sessions", pred)
+    hits = _find_notes(vault / "sessions", pred, recursive=True)
     return sorted(hits, key=lambda h: h[0].stat().st_mtime, reverse=True)[:limit]
 
 

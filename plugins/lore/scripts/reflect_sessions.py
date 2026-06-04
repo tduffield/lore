@@ -20,6 +20,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import frontmatter
+from vault import iter_note_paths
 
 _FINALIZED_STATUSES = frozenset(("complete", "finalized"))
 
@@ -49,7 +50,7 @@ def sessions_in_window(
         return []
 
     selected: list[Path] = []
-    for note in sessions_dir.glob("*.md"):
+    for note in iter_note_paths(sessions_dir, recursive=True):
         fm = frontmatter.parse_frontmatter(note)
         status = fm.get("status", "")
         if status not in _FINALIZED_STATUSES:
