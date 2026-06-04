@@ -119,7 +119,10 @@ def _finish(vault: Path, tmp_path: Path, worktree: str = "widget-worktree"):
 
 
 def _notes_in(vault: Path, subdir: str) -> list[Path]:
-    return sorted((vault / subdir).glob("*.md"))
+    # Harvested notes land in <subdir>/YYYY-MM/ buckets; include both the bucket
+    # level and any flat notes so assertions hold regardless of layout.
+    d = vault / subdir
+    return sorted(list(d.glob("*.md")) + list(d.glob("*/*.md")))
 
 
 # ---------------------------------------------------------------------------
@@ -437,3 +440,110 @@ class TestIdempotentRerun:
         note.write_text(txt)
         _finish(vault, tmp_path)
         assert len(_notes_in(vault, "deferred")) == 1
+
+
+# ---------------------------------------------------------------------------
+# date-bucketing: harvested notes land in <folder>/YYYY-MM/, dedup recurses
+# ---------------------------------------------------------------------------
+
+# The scripts dir must be importable so harvest's `from vault import ...`
+# resolves the sibling module the same way the CLI wires it up.
+_SCRIPTS_DIR = str(PLUGIN_ROOT / "scripts")
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+
+import harvest  # noqa: E402
+
+TEMPLATES_DIR = PLUGIN_ROOT / "templates"
+TODAY = "2026-06-04"
+BUCKET = "2026-06"
+
+
+def _expand(vault: Path, pending_text: str, session_text: str = ""):
+    return harvest.expand(
+        vault=vault,
+        pending_text=pending_text,
+        session_text=session_text,
+        templates_dir=TEMPLATES_DIR,
+        today=TODAY,
+        project="test-project",
+    )
+
+
+class TestHarvestBuckets:
+    def _bare_vault(self, tmp_path: Path) -> Path:
+        vault = tmp_path / "vault"
+        for d in ("deferred", "decisions", "dead-ends", "radar", "lessons"):
+            (vault / d).mkdir(parents=True, exist_ok=True)
+        return vault
+
+    def test_lesson_lands_in_month_bucket_not_flat(self, tmp_path):
+        vault = self._bare_vault(tmp_path)
+        pending = (
+            "- lesson: skipped the bounds check on the flange array. "
+            "Why it matters: out-of-range writes corrupt the adjacent widget. "
+            "Confidence: high.  <!-- h:eeeeeeeeeeee -->\n"
+        )
+        result = _expand(vault, pending)
+        assert len(result.written) == 1
+        written = result.written[0]
+        assert written.parent == vault / "lessons" / BUCKET, written
+        # nothing flat in lessons/
+        assert list((vault / "lessons").glob("*.md")) == []
+
+    def test_decision_lands_in_month_bucket_not_flat(self, tmp_path):
+        vault = self._bare_vault(tmp_path)
+        pending = (
+            "- decision: chose the ring buffer over a linked list because "
+            "lookups stay O(1). Reversibility: hard.  <!-- h:bbbbbbbbbbbb -->\n"
+        )
+        result = _expand(vault, pending)
+        assert len(result.written) == 1
+        assert result.written[0].parent == vault / "decisions" / BUCKET
+        assert list((vault / "decisions").glob("*.md")) == []
+
+    def test_unique_path_dedupes_within_bucket(self, tmp_path):
+        vault = self._bare_vault(tmp_path)
+        # two lessons with the same lead → same stem → second gets -2,
+        # BOTH inside the month bucket.
+        pending = (
+            "- lesson: the widget broke. Confidence: high.  <!-- h:1111111111aa -->\n"
+            "- lesson: the widget broke. Confidence: low.  <!-- h:2222222222bb -->\n"
+        )
+        result = _expand(vault, pending)
+        assert len(result.written) == 2
+        bucket = vault / "lessons" / BUCKET
+        names = {p.name for p in result.written}
+        assert all(p.parent == bucket for p in result.written), result.written
+        assert "2026-06-04-the-widget-broke.md" in names, names
+        assert "2026-06-04-the-widget-broke-2.md" in names, names
+
+    def test_dedup_is_bucket_aware_no_duplicate(self, tmp_path):
+        # Regression: a hash already stamped in a BUCKETED note must be seen by
+        # the dedup scan, so a re-harvest of the same hash writes nothing.
+        vault = self._bare_vault(tmp_path)
+        pending = (
+            "- lesson: skipped the bounds check on the flange array. "
+            "Confidence: high.  <!-- h:eeeeeeeeeeee -->\n"
+        )
+        first = _expand(vault, pending)
+        assert len(first.written) == 1
+        # the note is bucketed; a flat-only scan would miss it
+        assert first.written[0].parent == vault / "lessons" / BUCKET
+        second = _expand(vault, pending)
+        assert second.written == [], second.written
+        # still exactly one note total
+        all_lessons = list((vault / "lessons" / BUCKET).glob("*.md"))
+        assert len(all_lessons) == 1, all_lessons
+
+    def test_second_expand_same_pending_writes_nothing_new(self, tmp_path):
+        vault = self._bare_vault(tmp_path)
+        pending = (
+            "- deferred: rewrite the gizmo loader. "
+            "Trigger to revisit: gizmo count exceeds 100.  <!-- h:aaaaaaaaaaaa -->\n"
+            "- decision: chose the ring buffer. Reversibility: hard.  <!-- h:bbbbbbbbbbbb -->\n"
+        )
+        first = _expand(vault, pending)
+        assert len(first.written) == 2
+        second = _expand(vault, pending)
+        assert second.written == [], second.written

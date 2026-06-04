@@ -71,8 +71,12 @@ def _make_vault(tmp_path: Path) -> Path:
 
 
 def _find_new_note(dir_path: Path) -> Path:
-    """Return the single .md file written to a directory."""
-    notes = list(dir_path.glob("*.md"))
+    """Return the single .md file written under a directory.
+
+    plan/spec notes are date-bucketed into ``<dir>/YYYY-MM/`` (the
+    date-bucketed archive layout), so search the bucket subdir too.
+    """
+    notes = list(dir_path.glob("*.md")) + list(dir_path.glob("*/*.md"))
     assert len(notes) == 1, f"Expected 1 note, got {notes}"
     return notes[0]
 
@@ -90,7 +94,9 @@ class TestNewSpec:
              "--project", "my-project"],
         )
         assert r.returncode == 0, r.stderr + r.stdout
-        assert len(list((vault / "specs").glob("*.md"))) == 1
+        # Notes are date-bucketed into specs/YYYY-MM/, not flat at the root.
+        assert list((vault / "specs").glob("*.md")) == []
+        assert len(list((vault / "specs").glob("*/*.md"))) == 1
 
     def test_frontmatter_type_is_spec(self, tmp_path):
         vault = _make_vault(tmp_path)
@@ -276,7 +282,9 @@ class TestNewPlan:
              "--project", "my-project"],
         )
         assert r.returncode == 0, r.stderr + r.stdout
-        assert len(list((vault / "plans").glob("*.md"))) == 1
+        # Notes are date-bucketed into plans/YYYY-MM/, not flat at the root.
+        assert list((vault / "plans").glob("*.md")) == []
+        assert len(list((vault / "plans").glob("*/*.md"))) == 1
 
     def test_frontmatter_type_is_plan(self, tmp_path):
         vault = _make_vault(tmp_path)

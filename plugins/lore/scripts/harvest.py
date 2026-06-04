@@ -26,6 +26,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from vault import bucket_dir, iter_note_paths
+
 # Typed one-liner: `- <type>: <body>  <!-- h:<hash> -->` (marker optional here;
 # unmarked typed lines are treated as malformed — they can't be deduped safely).
 _ENTRY_RE = re.compile(
@@ -259,7 +261,7 @@ def _existing_hashes(vault: Path) -> set[str]:
         d = vault / sub
         if not d.is_dir():
             continue
-        for p in d.glob("*.md"):
+        for p in iter_note_paths(d, recursive=True):
             try:
                 head = p.read_text(encoding="utf-8")
             except Exception:
@@ -329,7 +331,7 @@ def expand(
         rendered = render_note(entry, templates_dir, today, project)
         lead, _ = _split_body(entry.body)
         stem = f"{today}-{_kebab(_title_from(lead))}"
-        note_dir = vault / _TYPE_DIRS[entry.kind]
+        note_dir = bucket_dir(vault / _TYPE_DIRS[entry.kind], today)
         note_dir.mkdir(parents=True, exist_ok=True)
         path = _unique_path(note_dir, stem)
         path.write_text(rendered, encoding="utf-8")

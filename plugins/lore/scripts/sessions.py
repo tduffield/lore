@@ -24,6 +24,7 @@ from pathlib import Path
 
 import config
 import frontmatter
+from vault import bucket_dir, iter_note_paths
 
 # Statuses that mean a session note is already finalized — do not re-stamp.
 _TERMINAL_STATUSES = frozenset(("complete", "shelved", "finalized", "handoff"))
@@ -79,7 +80,7 @@ def session_note_path(vault: Path, worktree_name: str) -> Path | None:
     sessions_dir = Path(vault) / "sessions"
     if not sessions_dir.is_dir():
         return None
-    for p in sorted(sessions_dir.glob("*.md"), reverse=True):
+    for p in sorted(iter_note_paths(sessions_dir, recursive=True), key=lambda p: p.name, reverse=True):
         if _is_note_for_worktree(p, worktree_name):
             return p
     return None
@@ -91,7 +92,8 @@ def all_session_notes_for_worktree(vault: Path, worktree_name: str) -> list[Path
     if not sessions_dir.is_dir():
         return []
     return sorted(
-        (p for p in sessions_dir.glob("*.md") if _is_note_for_worktree(p, worktree_name)),
+        (p for p in iter_note_paths(sessions_dir, recursive=True) if _is_note_for_worktree(p, worktree_name)),
+        key=lambda p: p.name,
         reverse=True,
     )
 
@@ -143,7 +145,7 @@ def sweep_orphan_skeletons(vault: Path, exclude: set[Path]) -> list[Path]:
         return []
     now = time.time()
     deleted: list[Path] = []
-    for note in sessions_dir.glob("*.md"):
+    for note in iter_note_paths(sessions_dir, recursive=True):
         if note in exclude:
             continue
         try:
@@ -209,7 +211,12 @@ def ensure_session_note(
         if age < RESUME_WINDOW_SECONDS:
             return existing, False
 
-    new_path = sessions_dir / f"{_filename_stamp(now_iso)}-{worktree_name}.md"
+    month_dir = bucket_dir(sessions_dir, now_iso)
+    try:
+        month_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    new_path = month_dir / f"{_filename_stamp(now_iso)}-{worktree_name}.md"
     sid_line = f"session_id: {session_id}\n" if session_id else "session_id:\n"
     content = (
         "---\n"
@@ -400,7 +407,7 @@ def find_shelved_notes(vault: Path, slug: str | None = None) -> list[Path]:
     _shelved = frozenset(("shelved", "handoff"))
     results: list[Path] = []
 
-    for p in sessions_dir.glob("*.md"):
+    for p in iter_note_paths(sessions_dir, recursive=True):
         if slug is not None and _worktree_from_stem(p.stem) != slug:
             continue
         try:
@@ -425,10 +432,10 @@ def build_action_index(vault: Path) -> dict[str, dict[str, int]]:
     vault = Path(vault)
     index: dict[str, dict[str, int]] = {}
 
-    def _scan(directory: Path, bucket: str) -> None:
+    def _scan(directory: Path, bucket: str, recursive: bool = False) -> None:
         if not directory.is_dir():
             return
-        for p in directory.glob("*.md"):
+        for p in iter_note_paths(directory, recursive=recursive):
             fm = frontmatter.parse_frontmatter(p)
             if fm.get("status") in ("graduated", "obsolete"):
                 continue
@@ -443,8 +450,9 @@ def build_action_index(vault: Path) -> dict[str, dict[str, int]]:
                 entry = index.setdefault(a, {"collaboration": 0, "dead_ends": 0})
                 entry[bucket] += 1
 
+    # collaboration stays flat (out of scope); dead-ends is a living folder.
     _scan(vault / "collaboration", "collaboration")
-    _scan(vault / "dead-ends", "dead_ends")
+    _scan(vault / "dead-ends", "dead_ends", recursive=True)
     return index
 
 
@@ -521,11 +529,13 @@ def render_tool_notes(vault: Path) -> str | None:
     return "\n".join(lines)
 
 
-def _count(directory: Path, predicate) -> int:
+def _count(directory: Path, predicate, recursive: bool = False) -> int:
     if not directory.is_dir():
         return 0
     return sum(
-        1 for p in directory.glob("*.md") if predicate(frontmatter.parse_frontmatter(p))
+        1
+        for p in iter_note_paths(directory, recursive=recursive)
+        if predicate(frontmatter.parse_frontmatter(p))
     )
 
 
@@ -546,16 +556,19 @@ def get_vault_stats(vault: Path) -> dict:
         vault / "deferred",
         lambda fm: fm.get("type") == "deferred"
         and fm.get("status") in ("open", "scheduled", "resurfaced"),
+        recursive=True,
     )
     stats["dead_ends"] = _count(
-        vault / "dead-ends", lambda fm: fm.get("type") == "dead-end"
+        vault / "dead-ends", lambda fm: fm.get("type") == "dead-end",
+        recursive=True,
     )
     stats["active_lessons"] = _count(
         vault / "lessons",
         lambda fm: fm.get("type") == "lesson" and fm.get("status", "active") == "active",
+        recursive=True,
     )
     stats["sessions"] = _count(
-        vault / "sessions", lambda fm: fm.get("type") == "session"
+        vault / "sessions", lambda fm: fm.get("type") == "session", recursive=True
     )
     return stats
 

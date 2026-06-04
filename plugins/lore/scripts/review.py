@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Iterable
 
 import frontmatter as fm_mod
+from vault import iter_note_paths
 
 GRADUATION_AGE_DAYS = 30
 STALE_SUBSYSTEM_DAYS = 60
@@ -115,11 +116,12 @@ def section_activity(vault: Path, since: str) -> list[str]:
 
 def _collect_actions(vault: Path) -> dict[str, list[Path]]:
     index: dict[str, list[Path]] = {}
-    for d in ("collaboration", "dead-ends"):
+    # dead-ends is a date-bucketed living folder (recurse); collaboration stays flat.
+    for d, recursive in (("collaboration", False), ("dead-ends", True)):
         dir_path = vault / d
         if not dir_path.is_dir():
             continue
-        for p in dir_path.glob("*.md"):
+        for p in iter_note_paths(dir_path, recursive=recursive):
             note_fm = fm_mod.parse_frontmatter(p)
             if note_fm.get("status") in ("graduated", "obsolete"):
                 continue
@@ -258,13 +260,13 @@ def section_stale_subsystems(vault: Path) -> list[str]:
 def section_open_deferred(vault: Path) -> list[str]:
     lines = ["## Open deferred items", ""]
     dir_path = vault / "deferred"
-    if not dir_path.is_dir() or not any(dir_path.glob("*.md")):
+    if not dir_path.is_dir() or not any(iter_note_paths(dir_path, recursive=True)):
         lines.append("_No open deferred items._")
         lines.append("")
         return lines
 
     hits: list[tuple[Path, dict]] = []
-    for p in sorted(dir_path.glob("*.md")):
+    for p in sorted(iter_note_paths(dir_path, recursive=True)):
         note_fm = fm_mod.parse_frontmatter(p)
         if note_fm.get("type") == "deferred" and note_fm.get("status") in ("open", "watching", "resurfaced"):
             hits.append((p, note_fm))
@@ -287,13 +289,13 @@ def section_open_deferred(vault: Path) -> list[str]:
 def section_dead_ends(vault: Path) -> list[str]:
     lines = ["## Dead-ends (for revive-condition check)", ""]
     dir_path = vault / "dead-ends"
-    if not dir_path.is_dir() or not any(dir_path.glob("*.md")):
+    if not dir_path.is_dir() or not any(iter_note_paths(dir_path, recursive=True)):
         lines.append("_No dead-ends recorded yet._")
         lines.append("")
         return lines
 
     hits: list[tuple[Path, dict]] = []
-    for p in sorted(dir_path.glob("*.md")):
+    for p in sorted(iter_note_paths(dir_path, recursive=True)):
         note_fm = fm_mod.parse_frontmatter(p)
         if note_fm.get("type") == "dead-end":
             hits.append((p, note_fm))
@@ -315,13 +317,13 @@ def section_dead_ends(vault: Path) -> list[str]:
 def section_open_radar(vault: Path) -> list[str]:
     lines = ["## Open radar items", ""]
     dir_path = vault / "radar"
-    if not dir_path.is_dir() or not any(dir_path.glob("*.md")):
+    if not dir_path.is_dir() or not any(iter_note_paths(dir_path, recursive=True)):
         lines.append("_No radar items yet._")
         lines.append("")
         return lines
 
     hits: list[tuple[Path, dict]] = []
-    for p in sorted(dir_path.glob("*.md")):
+    for p in sorted(iter_note_paths(dir_path, recursive=True)):
         note_fm = fm_mod.parse_frontmatter(p)
         if note_fm.get("type") == "radar" and note_fm.get("status") in ("open", "watching"):
             hits.append((p, note_fm))
@@ -343,13 +345,13 @@ def section_open_radar(vault: Path) -> list[str]:
 def section_active_lessons(vault: Path) -> list[str]:
     lines = ["## Active lessons", ""]
     dir_path = vault / "lessons"
-    if not dir_path.is_dir() or not any(dir_path.glob("*.md")):
+    if not dir_path.is_dir() or not any(iter_note_paths(dir_path, recursive=True)):
         lines.append("_No active lessons._")
         lines.append("")
         return lines
 
     hits: list[tuple[Path, dict]] = []
-    for p in sorted(dir_path.glob("*.md")):
+    for p in sorted(iter_note_paths(dir_path, recursive=True)):
         note_fm = fm_mod.parse_frontmatter(p)
         status = note_fm.get("status", "active")
         if status == "active":

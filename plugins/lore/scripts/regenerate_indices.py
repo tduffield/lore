@@ -157,11 +157,29 @@ def first_paragraph_after_headings(text: str, max_chars: int = 140) -> str:
     return ""
 
 
-def load_md_files(folder: Path) -> list[tuple[Path, str, dict]]:
+def _iter_md_paths(folder: Path, recursive: bool):
+    """Yield note paths in *folder*, skipping `_`-prefixed files.
+
+    Flat by default. When *recursive*, also descends exactly one level into
+    `YYYY-MM/` month buckets (the date-bucketed archive layout), skipping
+    `_`-prefixed subdirs (`_archive/`, `_test/`). Bounded to one level — never
+    rglob — so deeper or special dirs are never descended.
+    """
+    for p in folder.glob("*.md"):
+        if not p.name.startswith("_"):
+            yield p
+    if recursive:
+        for sub in folder.iterdir():
+            if not sub.is_dir() or sub.name.startswith("_"):
+                continue
+            for p in sub.glob("*.md"):
+                if not p.name.startswith("_"):
+                    yield p
+
+
+def load_md_files(folder: Path, recursive: bool = False) -> list[tuple[Path, str, dict]]:
     out = []
-    for p in sorted(folder.glob("*.md")):
-        if p.name.startswith("_"):
-            continue
+    for p in sorted(_iter_md_paths(folder, recursive)):
         try:
             text = p.read_text(encoding="utf-8")
         except Exception:
@@ -171,7 +189,18 @@ def load_md_files(folder: Path) -> list[tuple[Path, str, dict]]:
 
 
 def link(p: Path) -> str:
-    return f"[[{p.parent.name}/{p.stem}]]"
+    """Emit a resolvable vault-relative wikilink.
+
+    For a flat note `plans/foo.md` → `[[plans/foo]]`; for a bucketed note
+    `plans/2026-06/foo.md` → `[[plans/2026-06/foo]]`. Using the full
+    vault-relative path (not just `p.parent.name`) keeps the link resolvable
+    after the date-bucketing move — `[[2026-06/foo]]` would not resolve.
+    """
+    try:
+        rel = p.relative_to(VAULT).with_suffix("")
+        return f"[[{rel.as_posix()}]]"
+    except ValueError:
+        return f"[[{p.parent.name}/{p.stem}]]"
 
 
 def link_with_title(p: Path, title: str) -> str:
@@ -201,9 +230,13 @@ def _neg_date(d: str) -> str:
 
 
 def render_dated_index(folder_name: str, folder: Path, date_keys: list[str]) -> str:
-    """For radar: flat list, sorted by chosen date desc."""
+    """For radar: list sorted by chosen date desc.
+
+    Radar is a date-bucketed living folder, so the scan recurses one level into
+    `YYYY-MM/` buckets while still listing any still-flat top-level notes.
+    """
     items = []
-    for p, text, fm in load_md_files(folder):
+    for p, text, fm in load_md_files(folder, recursive=True):
         d = first_date(*[fm.get(k) for k in date_keys])
         title = first_h1(text) or p.stem
         summary = first_paragraph_after_headings(text)
@@ -243,7 +276,7 @@ def render_deferred_index(folder_name: str, folder: Path) -> str:
     """
     open_items: list[tuple] = []
     closed_items: list[tuple] = []
-    for p, text, fm in load_md_files(folder):
+    for p, text, fm in load_md_files(folder, recursive=True):
         d = first_date(fm.get("revisit-after"), fm.get("raised"), p.name)
         title = first_h1(text) or p.stem
         summary = first_paragraph_after_headings(text)
@@ -306,10 +339,14 @@ def render_deferred_index(folder_name: str, folder: Path) -> str:
 
 
 def render_lessons_index(folder_name: str, folder: Path) -> str:
-    """For lessons: flat list grouped by subsystem (alpha), then date desc within group."""
+    """For lessons: list grouped by subsystem (alpha), then date desc within group.
+
+    Lessons are a date-bucketed living folder, so the scan recurses one level
+    into `YYYY-MM/` buckets while still listing any still-flat top-level notes.
+    """
     active: list[tuple[str, Path, str, str, str, str]] = []
     superseded: list[tuple[str, Path, str, str, str, str]] = []
-    for p, text, fm in load_md_files(folder):
+    for p, text, fm in load_md_files(folder, recursive=True):
         d = first_date(fm.get("date"), p.name)
         title = first_h1(text) or p.stem
         summary = first_paragraph_after_headings(text)
@@ -375,9 +412,13 @@ def render_lessons_index(folder_name: str, folder: Path) -> str:
 
 
 def render_status_index(folder_name: str, folder: Path) -> str:
-    """For plans/specs/designs: grouped by status bucket."""
+    """For plans/specs/designs: grouped by status bucket.
+
+    These are in-scope for date-bucketing, so the scan recurses one level into
+    `YYYY-MM/` buckets while still listing any still-flat top-level notes.
+    """
     buckets: dict[str, list] = {b: [] for b in BUCKET_ORDER}
-    for p, text, fm in load_md_files(folder):
+    for p, text, fm in load_md_files(folder, recursive=True):
         bucket = classify_status(fm.get("status"))
         title = first_h1(text) or p.stem
         summary = first_paragraph_after_headings(text)

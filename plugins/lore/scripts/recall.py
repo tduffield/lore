@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 import frontmatter as fm_module
+from vault import iter_note_paths
 
 
 def derive_subsystem_keywords(vault: Path) -> dict[str, list[str]]:
@@ -62,13 +63,20 @@ def infer_subsystems(vault: Path, branch: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def _find_notes(
-    directory: Path, predicate: Callable[[dict], bool]
+    directory: Path,
+    predicate: Callable[[dict], bool],
+    recursive: bool = False,
 ) -> list[tuple[Path, dict]]:
-    """Return (path, frontmatter) pairs matching predicate, sorted by name."""
+    """Return (path, frontmatter) pairs matching predicate, sorted by name.
+
+    Flat by default. The date-bucketed folders (sessions and the living folders
+    deferred/dead-ends/lessons) pass ``recursive=True`` to descend one level into
+    ``YYYY-MM/`` buckets. Name-keyed folders (subsystems) stay flat.
+    """
     if not directory.is_dir():
         return []
     hits: list[tuple[Path, dict]] = []
-    for md in sorted(directory.glob("*.md")):
+    for md in sorted(iter_note_paths(directory, recursive=recursive)):
         parsed = fm_module.parse_frontmatter(md)
         if predicate(parsed):
             hits.append((md, parsed))
@@ -130,7 +138,7 @@ def _relevant_deferred(
             and _has_overlap(parsed.get("surfaces"), sub_set)
             and _matches_project(parsed, project)
         )
-    return _find_notes(vault / "deferred", pred)
+    return _find_notes(vault / "deferred", pred, recursive=True)
 
 
 def _relevant_dead_ends(
@@ -145,7 +153,7 @@ def _relevant_dead_ends(
             parsed.get("type") == "dead-end"
             and _has_overlap(parsed.get("subsystems"), sub_set)
         )
-    return _find_notes(vault / "dead-ends", pred)
+    return _find_notes(vault / "dead-ends", pred, recursive=True)
 
 
 def _relevant_lessons(
@@ -161,7 +169,7 @@ def _relevant_lessons(
             and parsed.get("status", "active") == "active"
             and _has_overlap(parsed.get("subsystems"), sub_set)
         )
-    return _find_notes(vault / "lessons", pred)
+    return _find_notes(vault / "lessons", pred, recursive=True)
 
 
 def _recent_sessions(
@@ -174,7 +182,7 @@ def _recent_sessions(
             and _has_overlap(parsed.get("subsystems"), sub_set)
             and _matches_project(parsed, project)
         )
-    hits = _find_notes(vault / "sessions", pred)
+    hits = _find_notes(vault / "sessions", pred, recursive=True)
     return sorted(hits, key=lambda h: h[0].stat().st_mtime, reverse=True)[:limit]
 
 

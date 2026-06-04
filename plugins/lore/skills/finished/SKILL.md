@@ -30,13 +30,15 @@ job is to draft the session note sections, write them, and call `lore finish`.
 ### Step 1 — Locate and check the session note
 
 Find the active session note for this session (resolves by id, falling back to
-the worktree name — prints a vault-relative path):
+the worktree name — prints a vault-relative path). Resolution is bucket-aware:
+session notes live either flat at `sessions/` or date-bucketed in
+`sessions/YYYY-MM/`, and `lore session-note` scans both:
 
 ```bash
 lore session-note
 ```
 
-Read it:
+This prints the note's full path. Read it:
 ```bash
 cat "$LORE_VAULT/$(lore session-note)"
 ```
