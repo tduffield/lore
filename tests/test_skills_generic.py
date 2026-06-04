@@ -116,54 +116,40 @@ def test_template_has_no_private_tokens(template_md: Path):
 _BRAINSTORM_SKILL = SKILLS_DIR / "brainstorm" / "SKILL.md"
 
 # The four extension-point skip notices plus the cross-plugin forge handoff.
-# Each tuple is: (test_id, phrase_parts)
-# phrase_parts are joined to form the exact substring to assert.
-_BRAINSTORM_SKIP_PHRASES: list[tuple[str, list[str]]] = [
-    (
-        "design_mockup_skip",
-        ["design-mockup tool is configured"],
-    ),
-    (
-        "design_mockup_skip_not_configured",
-        ["design-mockup tool", "not configured"],
-    ),
-    (
-        "feature_flags_skip",
-        ["no feature-flag provider configured"],
-    ),
-    (
-        "observability_skip",
-        ["no observability provider configured"],
-    ),
-    (
-        "issue_tracker_skip",
-        ["no issue tracker configured"],
-    ),
-    (
-        "forge_planning_handoff",
-        ["planning", "skill lives in the", "forge", "plugin"],
-    ),
+# Each tuple is: (test_id, phrase) — phrase is a SINGLE DISTINCTIVE CONTIGUOUS
+# substring that must appear verbatim. These are deliberately not split into
+# common-word parts: a "parts present anywhere" check is vacuous (the council
+# Advocate forge-handoff guard would pass even if the whole notice were deleted,
+# as long as "forge"/"plugin"/"planning" survived elsewhere). Each phrase below
+# is load-bearing — deleting the seam's notice deletes the only occurrence.
+_BRAINSTORM_SKIP_PHRASES: list[tuple[str, str]] = [
+    ("design_mockup_skip", "design-mockup tool is configured"),
+    ("design_mockup_skip_not_configured", "the mockup step is skipped"),
+    ("feature_flags_skip", "no feature-flag provider configured"),
+    ("observability_skip", "no observability provider configured"),
+    ("issue_tracker_skip", "no issue tracker configured"),
+    ("forge_planning_handoff", "skill lives in the forge plugin"),
 ]
 
 
 @pytest.mark.parametrize(
-    "test_id,phrase_parts",
+    "test_id,phrase",
     _BRAINSTORM_SKIP_PHRASES,
     ids=[t[0] for t in _BRAINSTORM_SKIP_PHRASES],
 )
-def test_brainstorm_visible_skip_phrase_present(test_id: str, phrase_parts: list[str]):
+def test_brainstorm_visible_skip_phrase_present(test_id: str, phrase: str):
     """brainstorm/SKILL.md must announce each stripped seam with a visible-skip
-    phrase — a silent omission must fail this test."""
+    phrase — a silent omission must fail this test. The phrase is a distinctive
+    contiguous substring, so deleting the seam's notice fails the test."""
     assert _BRAINSTORM_SKILL.exists(), (
         "brainstorm/SKILL.md does not exist — create it before these tests pass"
     )
     text = _BRAINSTORM_SKILL.read_text()
-    for part in phrase_parts:
-        assert part in text, (
-            f"brainstorm/SKILL.md missing visible-skip phrase component {part!r} "
-            f"(test: {test_id}). Every stripped private seam must announce itself — "
-            "a silent omission defeats the degradation contract."
-        )
+    assert phrase in text, (
+        f"brainstorm/SKILL.md missing visible-skip phrase {phrase!r} "
+        f"(test: {test_id}). Every stripped private seam must announce itself — "
+        "a silent omission defeats the degradation contract."
+    )
 
 
 def test_brainstorm_skill_has_no_private_tokens():
