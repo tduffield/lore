@@ -17,6 +17,18 @@ from typing import Iterator
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
+def bucket_dir(folder: Path, date_or_ts: str) -> Path:
+    """Return the ``YYYY-MM`` month-bucket subdir of *folder* for a note.
+
+    *date_or_ts* is any string starting with ``YYYY-MM`` (an ISO timestamp like
+    ``2026-06-15T09:30:00Z`` or a bare ``2026-06-15`` date); the first seven
+    characters (``YYYY-MM``) name the bucket. Callers ``mkdir(parents=True,
+    exist_ok=True)`` the result before writing — creation is idempotent and
+    race-safe.
+    """
+    return Path(folder) / date_or_ts[:7]
+
+
 def iter_note_paths(directory: Path, recursive: bool = False) -> Iterator[Path]:
     """Yield ``.md`` notes in *directory*.
 
@@ -179,7 +191,7 @@ def find_session_note_by_session_id(vault: Path, session_id: str) -> Path | None
 
     needle = f"session_id: {session_id}"
     matches: list[Path] = []
-    for p in sessions_dir.glob("*.md"):
+    for p in iter_note_paths(sessions_dir, recursive=True):
         try:
             text = p.read_text()
         except Exception:
@@ -193,7 +205,7 @@ def find_session_note_by_session_id(vault: Path, session_id: str) -> Path | None
     if not matches:
         return None
     # Pathological: two notes share an id → prefer the newest stem.
-    return sorted(matches, reverse=True)[0]
+    return sorted(matches, key=lambda p: p.name, reverse=True)[0]
 
 
 # A `.claude/worktrees/<name>/` path segment marks a Claude Code worktree.

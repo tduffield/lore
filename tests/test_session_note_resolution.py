@@ -74,6 +74,24 @@ def test_by_session_id_matches_frontmatter(tmp_path):
     assert v.find_session_note_by_session_id(vault, "bbb") == want
 
 
+def test_by_session_id_matches_bucketed_note(tmp_path):
+    """By-id resolution must recurse into date buckets (`sessions/YYYY-MM/`).
+
+    Once session notes are date-bucketed, a flat scan would never see them and
+    by-id resolution would silently degrade to the worktree fallback. The scan
+    must find a note one level deep just as it finds a flat one.
+    """
+    vault = tmp_path / "v"
+    sd = vault / "sessions"
+    bucket = sd / "2026-06"
+    bucket.mkdir(parents=True)
+    _write_note(sd, "2026-05-01-1000", "alpha", session_id="flat")
+    want = _write_note(bucket, "2026-06-02-1000", "beta", session_id="bucketed")
+
+    v = load_script("vault")
+    assert v.find_session_note_by_session_id(vault, "bucketed") == want
+
+
 def test_by_session_id_ignores_body_mentions(tmp_path):
     """A `session_id:` string in the body must not count — frontmatter only."""
     vault = tmp_path / "v"

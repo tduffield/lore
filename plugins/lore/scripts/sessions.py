@@ -24,7 +24,7 @@ from pathlib import Path
 
 import config
 import frontmatter
-from vault import iter_note_paths
+from vault import bucket_dir, iter_note_paths
 
 # Statuses that mean a session note is already finalized — do not re-stamp.
 _TERMINAL_STATUSES = frozenset(("complete", "shelved", "finalized", "handoff"))
@@ -211,7 +211,12 @@ def ensure_session_note(
         if age < RESUME_WINDOW_SECONDS:
             return existing, False
 
-    new_path = sessions_dir / f"{_filename_stamp(now_iso)}-{worktree_name}.md"
+    month_dir = bucket_dir(sessions_dir, now_iso)
+    try:
+        month_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    new_path = month_dir / f"{_filename_stamp(now_iso)}-{worktree_name}.md"
     sid_line = f"session_id: {session_id}\n" if session_id else "session_id:\n"
     content = (
         "---\n"

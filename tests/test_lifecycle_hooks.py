@@ -226,8 +226,8 @@ class TestSessionContext:
         out = _run_session_context({"session_id": "abc"}, env, cwd)
         data = json.loads(out)
         ctx = data["hookSpecificOutput"]["additionalContext"]
-        # A session note was created
-        notes = list((vault / "sessions").glob("*.md"))
+        # A session note was created in its YYYY-MM month bucket.
+        notes = list((vault / "sessions").glob("*/*.md"))
         assert len(notes) == 1
         assert notes[0].name.endswith("-my-worktree.md")
         fm = load_script("frontmatter").parse_frontmatter(notes[0])
@@ -244,8 +244,8 @@ class TestSessionContext:
         cwd.mkdir()
         env = {"LORE_VAULT": str(vault), "PATH": os.environ.get("PATH", "")}
         _run_session_context({"session_id": "x"}, env, cwd)
-        # The note landed in the $LORE_VAULT vault, not elsewhere
-        assert list((vault / "sessions").glob("*.md"))
+        # The note landed in the $LORE_VAULT vault (its month bucket), not elsewhere
+        assert list((vault / "sessions").glob("*/*.md"))
 
     def test_footgun_warning_when_unset_and_no_default(self, tmp_path):
         """$LORE_VAULT unset AND ~/lore absent → visible warning in context."""
@@ -374,8 +374,9 @@ class TestFinalize:
             ok = mod.write_note_atomic(note, "TOTALLY DIFFERENT CONTENT")
         assert ok is False
         assert note.read_text() == original, "original note was clobbered"
-        # No stray temp files left behind in sessions/
-        leftovers = [p for p in (vault / "sessions").iterdir() if p != note]
+        # No stray temp files left behind in the note's month bucket (the temp
+        # file is created alongside the note via tempfile.mkstemp(dir=...)).
+        leftovers = [p for p in note.parent.iterdir() if p != note]
         assert leftovers == [], f"temp files left behind: {leftovers}"
 
 

@@ -71,6 +71,11 @@ _NOTE_DIRS: dict[str, str] = {
 # Types that carry a project: field. dead-end is intentionally absent.
 _PROJECT_BEARING: frozenset[str] = frozenset({"deferred", "decision", "radar", "subsystem", "spec", "plan"})
 
+# Note types stored in date-bucketed YYYY-MM subdirs (the date-bucketed archive
+# layout). The living folders (deferred/dead-ends/decisions/radar) and singleton
+# subsystem profiles stay flat at the folder root.
+_BUCKETED_TYPES: frozenset[str] = frozenset({"spec", "plan"})
+
 # Which section of the session note gets the backlink (None = no backlink).
 _BACKLINK_SECTIONS: dict[str, str | None] = {
     "deferred": "Deferred",
@@ -233,6 +238,8 @@ def cmd_new(args: argparse.Namespace) -> int:
     # bare kebab name (no date prefix). All other types get YYYY-MM-DD-<slug>
     # naming with collision handling.
     note_dir = vault / _NOTE_DIRS[note_type]
+    if note_type in _BUCKETED_TYPES:
+        note_dir = vault_mod.bucket_dir(note_dir, today)
     note_dir.mkdir(parents=True, exist_ok=True)
     if note_type == "subsystem":
         stem = _kebab(args.title)
