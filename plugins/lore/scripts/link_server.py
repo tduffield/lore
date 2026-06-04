@@ -14,6 +14,8 @@ import sys
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+import config
+
 STATE_FILENAME = "link-server.json"
 STATE_SCHEMA = 1
 
@@ -141,3 +143,32 @@ def port_in_use(port: int) -> bool:
         return True
     finally:
         sock.close()
+
+
+DEFAULT_STATE_DIR = Path.home() / ".config" / "lore"
+
+
+def note_link(vault_rel_path: str, *, state_dir=DEFAULT_STATE_DIR) -> str:
+    """Return a clickable link for a vault-relative path when the link server is active.
+
+    "Active" means config.LINK_SERVER_ENABLED is True AND the install-state
+    file is present and readable. When active, returns
+    ``http://localhost:<port>/<vault_rel_path>`` with a single trailing ``.md``
+    stripped. When not active (kill-switch off, or no state file), returns
+    vault_rel_path unchanged.
+    """
+    if not config.LINK_SERVER_ENABLED:
+        return vault_rel_path
+    state = read_state(state_dir)
+    if state is None:
+        return vault_rel_path
+    # Coerce defensively: a hand-corrupted state file could carry a non-int
+    # port; fall back to the default rather than emit a broken host:port.
+    try:
+        port = int(state.get("port", 7777))
+    except (TypeError, ValueError):
+        port = 7777
+    path = vault_rel_path
+    if path.endswith(".md"):
+        path = path[:-3]
+    return f"http://localhost:{port}/{path}"
