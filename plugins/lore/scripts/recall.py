@@ -69,9 +69,9 @@ def _find_notes(
 ) -> list[tuple[Path, dict]]:
     """Return (path, frontmatter) pairs matching predicate, sorted by name.
 
-    Flat by default — only the sessions call passes ``recursive=True`` to descend
-    into ``YYYY-MM/`` buckets. The living folders (deferred/dead-ends/lessons)
-    stay flat.
+    Flat by default. The date-bucketed folders (sessions and the living folders
+    deferred/dead-ends/lessons) pass ``recursive=True`` to descend one level into
+    ``YYYY-MM/`` buckets. Name-keyed folders (subsystems) stay flat.
     """
     if not directory.is_dir():
         return []
@@ -138,7 +138,7 @@ def _relevant_deferred(
             and _has_overlap(parsed.get("surfaces"), sub_set)
             and _matches_project(parsed, project)
         )
-    return _find_notes(vault / "deferred", pred)
+    return _find_notes(vault / "deferred", pred, recursive=True)
 
 
 def _relevant_dead_ends(
@@ -153,7 +153,7 @@ def _relevant_dead_ends(
             parsed.get("type") == "dead-end"
             and _has_overlap(parsed.get("subsystems"), sub_set)
         )
-    return _find_notes(vault / "dead-ends", pred)
+    return _find_notes(vault / "dead-ends", pred, recursive=True)
 
 
 def _relevant_lessons(
@@ -169,7 +169,7 @@ def _relevant_lessons(
             and parsed.get("status", "active") == "active"
             and _has_overlap(parsed.get("subsystems"), sub_set)
         )
-    return _find_notes(vault / "lessons", pred)
+    return _find_notes(vault / "lessons", pred, recursive=True)
 
 
 def _recent_sessions(

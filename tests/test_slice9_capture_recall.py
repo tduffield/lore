@@ -42,7 +42,10 @@ def _make_vault(tmp_path: Path) -> Path:
 
 
 def _find_note(dir_path: Path) -> Path:
-    notes = list(dir_path.glob("*.md"))
+    # deferred/decision/radar/dead-end notes are date-bucketed into
+    # <dir>/YYYY-MM/ (the date-bucketed archive layout), so search the bucket
+    # subdir too.
+    notes = list(dir_path.glob("*.md")) + list(dir_path.glob("*/*.md"))
     assert len(notes) == 1, f"Expected 1 note, got {[n.name for n in notes]}"
     return notes[0]
 
@@ -501,9 +504,11 @@ class TestNoPlaceholdersAcrossAllTypes:
     def _run_and_check(self, vault, args):
         r = run_cli(args)
         assert r.returncode == 0, r.stderr
-        # Find the single note in all subdirs
+        # Find the single note in all subdirs. Date-bucketed types live in
+        # <subdir>/YYYY-MM/; subsystems stays flat — search both layouts.
         for subdir in ("deferred", "dead-ends", "decisions", "radar", "subsystems"):
-            notes = list((vault / subdir).glob("*.md"))
+            d = vault / subdir
+            notes = list(d.glob("*.md")) + list(d.glob("*/*.md"))
             for note in notes:
                 _assert_no_placeholders(note)
 

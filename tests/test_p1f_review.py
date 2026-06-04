@@ -524,3 +524,79 @@ class TestNoHardcodedPaths:
         assert result.returncode == 0, (
             f"leak gate found forbidden tokens:\n{result.stdout}{result.stderr}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Slice 6: living folders (deferred/dead-ends/radar/lessons) are date-bucketed.
+# The /brain-review re-justification sweep must see notes living in YYYY-MM/
+# buckets, not just flat at the folder root.
+# ---------------------------------------------------------------------------
+
+def _bucket(vault: Path, folder: str, slug: str, body: str) -> Path:
+    p = vault / folder / "2026-06" / f"{slug}.md"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body)
+    return p
+
+
+class TestReviewSeesBucketedLivingNotes:
+    def test_bucketed_deferred_appears(self, tmp_path):
+        vault = _make_vault(tmp_path)
+        _bucket(vault, "deferred", "synth-defer-bucketed",
+                "---\ntype: deferred\nstatus: open\nsurfaces: [synth-alpha]\n"
+                "next-check: when synth fires\n---\n\n# synth-defer-bucketed\n")
+        _init_git(vault)
+        mod = load_review()
+        report = mod.build_report(vault, since="7 days ago")
+        assert "synth-defer-bucketed" in report
+
+    def test_bucketed_dead_end_appears(self, tmp_path):
+        vault = _make_vault(tmp_path)
+        _bucket(vault, "dead-ends", "synth-dead-bucketed",
+                "---\ntype: dead-end\nstatus: open\nrevive-condition: when x\n"
+                "---\n\n# synth-dead-bucketed\n")
+        _init_git(vault)
+        mod = load_review()
+        report = mod.build_report(vault, since="7 days ago")
+        assert "synth-dead-bucketed" in report
+
+    def test_bucketed_radar_appears(self, tmp_path):
+        vault = _make_vault(tmp_path)
+        _bucket(vault, "radar", "synth-radar-bucketed",
+                "---\ntype: radar\nstatus: open\nrevisit-after: 2099-01-01\n"
+                "---\n\n# synth-radar-bucketed\n")
+        _init_git(vault)
+        mod = load_review()
+        report = mod.build_report(vault, since="7 days ago")
+        assert "synth-radar-bucketed" in report
+
+    def test_bucketed_lesson_appears(self, tmp_path):
+        vault = _make_vault(tmp_path)
+        _bucket(vault, "lessons", "synth-lesson-bucketed",
+                "---\ntype: lesson\nstatus: active\n---\n\n# synth-lesson-bucketed\n")
+        _init_git(vault)
+        mod = load_review()
+        report = mod.build_report(vault, since="7 days ago")
+        assert "synth-lesson-bucketed" in report
+
+    def test_action_drift_sees_bucketed_dead_end(self, tmp_path):
+        vault = _make_vault(tmp_path)
+        _bucket(vault, "dead-ends", "synth-dead-action",
+                "---\ntype: dead-end\nstatus: open\nactions: [synth-action]\n"
+                "---\n\n# synth-dead-action\n")
+        _init_git(vault)
+        mod = load_review()
+        actions = mod._collect_actions(vault)
+        assert "synth-action" in actions
+
+    def test_subsystems_stay_flat_in_review(self, tmp_path):
+        """Over-recursion guard: a subsystem profile in a YYYY-MM subdir must
+        NOT be picked up by the stale-subsystems section."""
+        vault = _make_vault(tmp_path)
+        _bucket(vault, "subsystems", "synth-sub-bucketed",
+                "---\ntype: subsystem\nlast-touched: 2020-01-01\n"
+                "---\n\n# synth-sub-bucketed\n")
+        _init_git(vault)
+        mod = load_review()
+        report = mod.build_report(vault, since="7 days ago")
+        assert "synth-sub-bucketed" not in report

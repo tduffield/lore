@@ -209,8 +209,9 @@ class TestGetVaultStats:
         stats = sessions.get_vault_stats(vault)
         assert stats["sessions"] == 2
 
-    def test_deferred_stays_flat(self, vault):
-        """Out-of-scope deferred folder must NOT recurse."""
+    def test_deferred_count_recurses(self, vault):
+        """Slice 6 inverts the Slice 2 guard: deferred is now a living folder
+        that recurses into YYYY-MM buckets — both flat AND bucketed are counted."""
         deferred = vault / "deferred"
         (deferred / "2026-06").mkdir(parents=True)
         (deferred / "2026-06" / "bucketed.md").write_text(
@@ -221,7 +222,53 @@ class TestGetVaultStats:
         )
         sessions = load_script("sessions")
         stats = sessions.get_vault_stats(vault)
-        assert stats["open_deferred"] == 1
+        assert stats["open_deferred"] == 2
+
+    def test_dead_ends_count_recurses(self, vault):
+        dead = vault / "dead-ends"
+        (dead / "2026-06").mkdir(parents=True)
+        (dead / "2026-06" / "bucketed.md").write_text(
+            "---\ntype: dead-end\n---\n# Bucketed\n"
+        )
+        (dead / "flat.md").write_text("---\ntype: dead-end\n---\n# Flat\n")
+        sessions = load_script("sessions")
+        stats = sessions.get_vault_stats(vault)
+        assert stats["dead_ends"] == 2
+
+    def test_lessons_count_recurses(self, vault):
+        lessons = vault / "lessons"
+        (lessons / "2026-06").mkdir(parents=True)
+        (lessons / "2026-06" / "bucketed.md").write_text(
+            "---\ntype: lesson\nstatus: active\n---\n# Bucketed\n"
+        )
+        (lessons / "flat.md").write_text(
+            "---\ntype: lesson\nstatus: active\n---\n# Flat\n"
+        )
+        sessions = load_script("sessions")
+        stats = sessions.get_vault_stats(vault)
+        assert stats["active_lessons"] == 2
+
+    def test_subsystems_count_stays_flat(self, vault):
+        """Name-keyed folders must NOT recurse (over-recursion guard)."""
+        sub = vault / "subsystems"
+        (sub / "2026-06").mkdir(parents=True)
+        (sub / "2026-06" / "bucketed.md").write_text(
+            "---\ntype: subsystem\n---\n# Bucketed\n"
+        )
+        (sub / "flat.md").write_text("---\ntype: subsystem\n---\n# Flat\n")
+        sessions = load_script("sessions")
+        stats = sessions.get_vault_stats(vault)
+        assert stats["subsystems"] == 1
+
+    def test_build_action_index_dead_ends_recurses(self, vault):
+        dead = vault / "dead-ends"
+        (dead / "2026-06").mkdir(parents=True)
+        body = "---\ntype: dead-end\nactions: [git-add-all]\n---\n# de\n"
+        (dead / "2026-06" / "bucketed.md").write_text(body)
+        (dead / "flat.md").write_text(body)
+        sessions = load_script("sessions")
+        index = sessions.build_action_index(vault)
+        assert index["git-add-all"]["dead_ends"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -252,16 +299,53 @@ class TestRecallRecursion:
         hits = recall._recent_sessions(vault, {"widget-flow"}, "test-project")
         assert len(hits) == 1
 
-    def test_deferred_recall_stays_flat(self, vault):
-        """recall deferred lookup must not pick up a bucketed deferred note."""
+    def test_deferred_recall_recurses(self, vault):
+        """Slice 6: recall deferred lookup now finds flat AND bucketed notes."""
         deferred = vault / "deferred"
         (deferred / "2026-06").mkdir(parents=True)
-        (deferred / "2026-06" / "bucketed.md").write_text(
-            "---\ntype: deferred\nstatus: open\nsurfaces: [widget-flow]\n---\n# Bucketed\n"
-        )
+        body = "---\ntype: deferred\nstatus: open\nsurfaces: [widget-flow]\n---\n# d\n"
+        bucketed = deferred / "2026-06" / "bucketed.md"
+        bucketed.write_text(body)
+        flat = deferred / "flat.md"
+        flat.write_text(body)
         recall = load_script("recall")
         hits = recall._relevant_deferred(vault, {"widget-flow"}, "test-project")
-        assert hits == []
+        assert {p for p, _ in hits} == {flat, bucketed}
+
+    def test_dead_ends_recall_recurses(self, vault):
+        dead = vault / "dead-ends"
+        (dead / "2026-06").mkdir(parents=True)
+        body = "---\ntype: dead-end\nsubsystems: [widget-flow]\n---\n# de\n"
+        bucketed = dead / "2026-06" / "bucketed.md"
+        bucketed.write_text(body)
+        flat = dead / "flat.md"
+        flat.write_text(body)
+        recall = load_script("recall")
+        hits = recall._relevant_dead_ends(vault, {"widget-flow"})
+        assert {p for p, _ in hits} == {flat, bucketed}
+
+    def test_lessons_recall_recurses(self, vault):
+        lessons = vault / "lessons"
+        (lessons / "2026-06").mkdir(parents=True)
+        body = "---\ntype: lesson\nstatus: active\nsubsystems: [widget-flow]\n---\n# l\n"
+        bucketed = lessons / "2026-06" / "bucketed.md"
+        bucketed.write_text(body)
+        flat = lessons / "flat.md"
+        flat.write_text(body)
+        recall = load_script("recall")
+        hits = recall._relevant_lessons(vault, {"widget-flow"})
+        assert {p for p, _ in hits} == {flat, bucketed}
+
+    def test_subsystem_profiles_stay_flat(self, vault):
+        """Over-recursion guard: a subsystem profile in a YYYY-MM subdir is not
+        resolved by the name-keyed lookup."""
+        sub = vault / "subsystems"
+        (sub / "2026-06").mkdir(parents=True)
+        (sub / "2026-06" / "widget-flow.md").write_text(
+            "---\ntype: subsystem\n---\n# widget-flow\n"
+        )
+        recall = load_script("recall")
+        assert recall._relevant_profiles(vault, ["widget-flow"]) == []
 
 
 # ---------------------------------------------------------------------------

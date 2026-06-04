@@ -72,9 +72,12 @@ _NOTE_DIRS: dict[str, str] = {
 _PROJECT_BEARING: frozenset[str] = frozenset({"deferred", "decision", "radar", "subsystem", "spec", "plan"})
 
 # Note types stored in date-bucketed YYYY-MM subdirs (the date-bucketed archive
-# layout). The living folders (deferred/dead-ends/decisions/radar) and singleton
-# subsystem profiles stay flat at the folder root.
-_BUCKETED_TYPES: frozenset[str] = frozenset({"spec", "plan"})
+# layout). The date-based living folders (deferred/dead-ends/decisions/radar)
+# join the archive types; only singleton subsystem profiles (name-keyed) stay
+# flat at the folder root.
+_BUCKETED_TYPES: frozenset[str] = frozenset(
+    {"spec", "plan", "deferred", "decision", "radar", "dead-end"}
+)
 
 # Which section of the session note gets the backlink (None = no backlink).
 _BACKLINK_SECTIONS: dict[str, str | None] = {
@@ -268,10 +271,12 @@ def cmd_new(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
         else:
-            rel_dir = _NOTE_DIRS[note_type]
-            note_stem = note_path.stem  # includes any -2/-3 suffix
+            # Use the note's full vault-relative path (minus suffix) so the
+            # wikilink resolves whether the note is flat or YYYY-MM-bucketed —
+            # `[[deferred/<stem>]]` would not resolve once bucketed.
+            rel_link = note_path.relative_to(vault).with_suffix("").as_posix()
             title_display = args.title
-            backlink = f"- [[{rel_dir}/{note_stem}]] — {title_display}"
+            backlink = f"- [[{rel_link}]] — {title_display}"
             frontmatter.patch_section(session_note, section, backlink)
 
     return 0
@@ -952,12 +957,16 @@ def cmd_stats(args: argparse.Namespace) -> int:
     open_deferred = _count(
         vault / "deferred",
         lambda fm: fm.get("status") in ("open", "resurfaced"),
+        recursive=True,
     )
     active_lessons = _count(
         vault / "lessons",
         lambda fm: fm.get("status", "active") == "active",
+        recursive=True,
     )
-    dead_ends = _count(vault / "dead-ends", lambda fm: fm.get("type") == "dead-end")
+    dead_ends = _count(
+        vault / "dead-ends", lambda fm: fm.get("type") == "dead-end", recursive=True
+    )
     sessions = _count(vault / "sessions", lambda fm: fm.get("type") == "session", recursive=True)
 
     print(f"vault: {vault}")

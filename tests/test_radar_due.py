@@ -318,3 +318,45 @@ def test_snoozed_legacy_status_does_not_crash(tmp_path: Path):
     # And it should be flagged in skipped_legacy
     legacy_names = {p.name for p in result.skipped_legacy}
     assert "legacy.md" in legacy_names
+
+
+# ---------------------------------------------------------------------------
+# Slice 6: radar is a date-bucketed living folder — selection recurses into
+# YYYY-MM/ buckets while still finding flat notes.
+# ---------------------------------------------------------------------------
+
+def test_bucketed_radar_note_is_selected(tmp_path: Path):
+    radar = _radar_dir(tmp_path)
+    (radar / "2026-06").mkdir()
+    _write_radar(
+        radar / "2026-06" / "bucketed.md",
+        type="radar",
+        project="acme",
+        status="active",
+        source="github-issue",
+        target="<owner/repo> 1",
+        check="daily",
+        added="2026-05-01",
+        **{"last-checked": "", "last-state": "open"},
+    )
+    result = radar_notes_due(tmp_path, today=date(2026, 6, 1))
+    assert "bucketed.md" in {p.name for p in result.due}
+
+
+def test_flat_and_bucketed_radar_both_selected(tmp_path: Path):
+    radar = _radar_dir(tmp_path)
+    (radar / "2026-06").mkdir()
+    for rel in ("flat.md", "2026-06/bucketed.md"):
+        _write_radar(
+            radar / rel,
+            type="radar",
+            project="acme",
+            status="active",
+            source="github-issue",
+            target="<owner/repo> 1",
+            check="daily",
+            added="2026-05-01",
+            **{"last-checked": "", "last-state": "open"},
+        )
+    result = radar_notes_due(tmp_path, today=date(2026, 6, 1))
+    assert {p.name for p in result.due} == {"flat.md", "bucketed.md"}

@@ -230,9 +230,13 @@ def _neg_date(d: str) -> str:
 
 
 def render_dated_index(folder_name: str, folder: Path, date_keys: list[str]) -> str:
-    """For radar: flat list, sorted by chosen date desc."""
+    """For radar: list sorted by chosen date desc.
+
+    Radar is a date-bucketed living folder, so the scan recurses one level into
+    `YYYY-MM/` buckets while still listing any still-flat top-level notes.
+    """
     items = []
-    for p, text, fm in load_md_files(folder):
+    for p, text, fm in load_md_files(folder, recursive=True):
         d = first_date(*[fm.get(k) for k in date_keys])
         title = first_h1(text) or p.stem
         summary = first_paragraph_after_headings(text)
@@ -272,7 +276,7 @@ def render_deferred_index(folder_name: str, folder: Path) -> str:
     """
     open_items: list[tuple] = []
     closed_items: list[tuple] = []
-    for p, text, fm in load_md_files(folder):
+    for p, text, fm in load_md_files(folder, recursive=True):
         d = first_date(fm.get("revisit-after"), fm.get("raised"), p.name)
         title = first_h1(text) or p.stem
         summary = first_paragraph_after_headings(text)
@@ -335,10 +339,14 @@ def render_deferred_index(folder_name: str, folder: Path) -> str:
 
 
 def render_lessons_index(folder_name: str, folder: Path) -> str:
-    """For lessons: flat list grouped by subsystem (alpha), then date desc within group."""
+    """For lessons: list grouped by subsystem (alpha), then date desc within group.
+
+    Lessons are a date-bucketed living folder, so the scan recurses one level
+    into `YYYY-MM/` buckets while still listing any still-flat top-level notes.
+    """
     active: list[tuple[str, Path, str, str, str, str]] = []
     superseded: list[tuple[str, Path, str, str, str, str]] = []
-    for p, text, fm in load_md_files(folder):
+    for p, text, fm in load_md_files(folder, recursive=True):
         d = first_date(fm.get("date"), p.name)
         title = first_h1(text) or p.stem
         summary = first_paragraph_after_headings(text)

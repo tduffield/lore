@@ -578,8 +578,9 @@ class TestBucketedScan:
         assert "[[plans/synth-still-flat-plan]]" in content
         assert "[[plans/2026-06/synth-bucketed-plan]]" in content
 
-    def test_out_of_scope_folder_stays_flat(self, tmp_path):
-        """A note in deferred/2026-06/ must NOT be picked up (deferred is flat)."""
+    def test_deferred_index_recurses_into_buckets(self, tmp_path):
+        """Slice 6 inverts the Slice 4 guard: deferred is now bucketed, so its
+        index lists both flat AND YYYY-MM-bucketed notes with resolvable links."""
         vault = _make_vault(tmp_path, "deferred/2026-06")
         _write_deferred(vault, "synth-flat-deferred")
         (vault / "deferred" / "2026-06" / "synth-nested-deferred.md").write_text(
@@ -589,7 +590,43 @@ class TestBucketedScan:
         _run_main(vault)
         content = (vault / "deferred" / "_index.md").read_text()
         assert "synth-flat-deferred" in content
-        assert "synth-nested-deferred" not in content
+        assert "synth-nested-deferred" in content
+        assert "[[deferred/2026-06/synth-nested-deferred]]" in content
+
+    def test_radar_index_recurses_into_buckets(self, tmp_path):
+        vault = _make_vault(tmp_path, "radar/2026-06")
+        _write_radar(vault, "synth-flat-radar")
+        (vault / "radar" / "2026-06" / "synth-nested-radar.md").write_text(
+            "---\ntype: radar\nstatus: open\nrevisit-after: 2099-06-01\n"
+            "added: 2099-01-01\n---\n\n# synth-nested-radar\n\nSynthetic.\n"
+        )
+        _run_main(vault)
+        content = (vault / "radar" / "_index.md").read_text()
+        assert "synth-flat-radar" in content
+        assert "synth-nested-radar" in content
+
+    def test_lessons_index_recurses_into_buckets(self, tmp_path):
+        vault = _make_vault(tmp_path, "lessons/2026-06")
+        _write_lesson(vault, "synth-flat-lesson")
+        (vault / "lessons" / "2026-06" / "synth-nested-lesson.md").write_text(
+            "---\ntype: lesson\ndate: 2099-01-01\nseverity: medium\n"
+            "subsystems: [synth-sub]\nstatus: active\n---\n\n# synth-nested-lesson\n\nSynthetic.\n"
+        )
+        _run_main(vault)
+        content = (vault / "lessons" / "_index.md").read_text()
+        assert "synth-flat-lesson" in content
+        assert "synth-nested-lesson" in content
+
+    def test_living_index_does_not_descend_two_levels(self, tmp_path):
+        """Over-recursion guard: only the month bucket level is scanned."""
+        vault = _make_vault(tmp_path, "deferred/2026-06/deeper")
+        (vault / "deferred" / "2026-06" / "deeper" / "synth-too-deep.md").write_text(
+            "---\ntype: deferred\nstatus: open\nvalue: high\neffort: S\n"
+            "revisit-after: 2099-06-01\n---\n\n# synth-too-deep\n\nSynthetic.\n"
+        )
+        _run_main(vault)
+        content = (vault / "deferred" / "_index.md").read_text()
+        assert "synth-too-deep" not in content
 
 
 class TestPreCommitHookStagesIndices:

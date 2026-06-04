@@ -33,6 +33,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import frontmatter
+from vault import iter_note_paths
 
 # Canonical lore radar statuses that are "closed" — always skip.
 _CLOSED_STATUSES = frozenset({"resolved", "dropped"})
@@ -100,7 +101,7 @@ def radar_notes_due(vault: Path, *, today: date) -> RadarDueResult:
     if not radar_dir.is_dir():
         return result
 
-    for note in sorted(radar_dir.glob("*.md")):
+    for note in sorted(iter_note_paths(radar_dir, recursive=True)):
         fm = frontmatter.parse_frontmatter(note)
         status = fm.get("status", "")
         source = fm.get("source", "")

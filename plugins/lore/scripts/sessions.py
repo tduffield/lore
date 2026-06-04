@@ -432,10 +432,10 @@ def build_action_index(vault: Path) -> dict[str, dict[str, int]]:
     vault = Path(vault)
     index: dict[str, dict[str, int]] = {}
 
-    def _scan(directory: Path, bucket: str) -> None:
+    def _scan(directory: Path, bucket: str, recursive: bool = False) -> None:
         if not directory.is_dir():
             return
-        for p in directory.glob("*.md"):
+        for p in iter_note_paths(directory, recursive=recursive):
             fm = frontmatter.parse_frontmatter(p)
             if fm.get("status") in ("graduated", "obsolete"):
                 continue
@@ -450,8 +450,9 @@ def build_action_index(vault: Path) -> dict[str, dict[str, int]]:
                 entry = index.setdefault(a, {"collaboration": 0, "dead_ends": 0})
                 entry[bucket] += 1
 
+    # collaboration stays flat (out of scope); dead-ends is a living folder.
     _scan(vault / "collaboration", "collaboration")
-    _scan(vault / "dead-ends", "dead_ends")
+    _scan(vault / "dead-ends", "dead_ends", recursive=True)
     return index
 
 
@@ -555,13 +556,16 @@ def get_vault_stats(vault: Path) -> dict:
         vault / "deferred",
         lambda fm: fm.get("type") == "deferred"
         and fm.get("status") in ("open", "scheduled", "resurfaced"),
+        recursive=True,
     )
     stats["dead_ends"] = _count(
-        vault / "dead-ends", lambda fm: fm.get("type") == "dead-end"
+        vault / "dead-ends", lambda fm: fm.get("type") == "dead-end",
+        recursive=True,
     )
     stats["active_lessons"] = _count(
         vault / "lessons",
         lambda fm: fm.get("type") == "lesson" and fm.get("status", "active") == "active",
+        recursive=True,
     )
     stats["sessions"] = _count(
         vault / "sessions", lambda fm: fm.get("type") == "session", recursive=True

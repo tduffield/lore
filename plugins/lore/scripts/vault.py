@@ -39,9 +39,9 @@ def iter_note_paths(directory: Path, recursive: bool = False) -> Iterator[Path]:
     skipped. Recursion is deliberately bounded to one level (not ``rglob``) so
     deeper or special dirs are never descended.
 
-    Only the in-scope folders (sessions/plans/specs/designs) pass
-    ``recursive=True``; the living folders (deferred/dead-ends/lessons/radar)
-    stay flat.
+    The date-bucketed folders (sessions/plans/specs/designs and the living
+    folders deferred/dead-ends/lessons/decisions/radar) pass ``recursive=True``;
+    the name-keyed folders (subsystems/tools/etc.) stay flat.
     """
     directory = Path(directory)
     if not directory.is_dir():

@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from conftest import CLI_PATH, load_script
 
 
@@ -191,3 +193,92 @@ class TestNewPlanSpecBucket:
         assert r.returncode == 0, r.stderr + r.stdout
         assert (vault / "subsystems" / "foo-widget.md").exists()
         assert not (vault / "subsystems" / "2026-06").exists()
+
+
+# ---------------------------------------------------------------------------
+# Slice 6: living folders (deferred/decision/radar/dead-end) bucket on create
+# ---------------------------------------------------------------------------
+
+class TestNewLivingFolderBucket:
+    @pytest.mark.parametrize(
+        "note_type,folder",
+        [
+            ("deferred", "deferred"),
+            ("decision", "decisions"),
+            ("radar", "radar"),
+            ("dead-end", "dead-ends"),
+        ],
+    )
+    def test_writes_into_month_bucket(self, tmp_path, note_type, folder):
+        vault = _make_vault(tmp_path)
+        r = run_cli(
+            ["new", note_type, "--vault", str(vault),
+             "--title", "Widget Thing", "--project", "widget-project"],
+            env={"LORE_TODAY": "2026-06-15"},
+        )
+        assert r.returncode == 0, r.stderr + r.stdout
+        bucket = vault / folder / "2026-06"
+        notes = list(bucket.glob("*.md"))
+        assert len(notes) == 1, f"{note_type}: expected 1 note in bucket, got {notes}"
+        assert notes[0].name == "2026-06-15-widget-thing.md"
+        # Nothing left flat at the folder root.
+        assert list((vault / folder).glob("*.md")) == []
+
+    @pytest.mark.parametrize(
+        "note_type,folder",
+        [
+            ("deferred", "deferred"),
+            ("decision", "decisions"),
+            ("radar", "radar"),
+            ("dead-end", "dead-ends"),
+        ],
+    )
+    def test_unique_path_dedupes_inside_bucket(self, tmp_path, note_type, folder):
+        vault = _make_vault(tmp_path)
+        for _ in range(2):
+            r = run_cli(
+                ["new", note_type, "--vault", str(vault),
+                 "--title", "Same Slug", "--project", "widget-project"],
+                env={"LORE_TODAY": "2026-06-15"},
+            )
+            assert r.returncode == 0, r.stderr + r.stdout
+        bucket = vault / folder / "2026-06"
+        names = sorted(p.name for p in bucket.glob("*.md"))
+        assert names == ["2026-06-15-same-slug-2.md", "2026-06-15-same-slug.md"]
+
+    def test_month_dir_auto_created(self, tmp_path):
+        """The bucket dir does not need to pre-exist — mkdir creates it."""
+        vault = _make_vault(tmp_path)
+        assert not (vault / "deferred").exists()
+        r = run_cli(
+            ["new", "deferred", "--vault", str(vault),
+             "--title", "No Dir Yet", "--project", "widget-project"],
+            env={"LORE_TODAY": "2026-06-15"},
+        )
+        assert r.returncode == 0, r.stderr + r.stdout
+        assert (vault / "deferred" / "2026-06").is_dir()
+
+    def test_session_backlink_uses_bucketed_path(self, tmp_path):
+        """The backlink written into the session note must reference the
+        bucketed path (deferred/2026-06/<stem>), not the now-broken flat
+        deferred/<stem> form — otherwise the wikilink won't resolve."""
+        vault = _make_vault(tmp_path)
+        worktree = tmp_path / "widget-wt"
+        worktree.mkdir()
+        # A session note whose stem encodes this worktree, so the backlink fires.
+        session = vault / "sessions" / "2026-06" / "2026-06-15-0900-widget-wt.md"
+        session.parent.mkdir(parents=True, exist_ok=True)
+        session.write_text(
+            "---\ntype: session\nworktree: widget-wt\nstatus: active\n---\n\n"
+            "# Session\n\n## Deferred\n\n## Learned\n\n## Decided\n"
+        )
+        r = run_cli(
+            ["new", "deferred", "--vault", str(vault),
+             "--title", "Backlink Target", "--project", "widget-project"],
+            env={"LORE_TODAY": "2026-06-15"},
+            cwd=worktree,
+        )
+        assert r.returncode == 0, r.stderr + r.stdout
+        content = session.read_text()
+        assert "[[deferred/2026-06/2026-06-15-backlink-target]]" in content
+        assert "[[deferred/2026-06-15-backlink-target]]" not in content

@@ -42,7 +42,10 @@ def _make_vault(tmp_path: Path) -> Path:
 
 
 def _find_notes(dir_path: Path) -> list[Path]:
-    return sorted(dir_path.glob("*.md"))
+    # Date-bucketed types (deferred/decision/radar/dead-end) live in
+    # <dir>/YYYY-MM/; subsystems (name-keyed) stay flat. Search both so this
+    # helper works for either layout.
+    return sorted(list(dir_path.glob("*.md")) + list(dir_path.glob("*/*.md")))
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +279,7 @@ class TestCaptureRecallIntegrationViaCLI:
         block = recall.render_subsystem_block(vault, matched)
         assert block is not None, "render_subsystem_block returned None for matched subsystems"
 
-        deferred_notes = list((vault / "deferred").glob("*.md"))
+        deferred_notes = _find_notes(vault / "deferred")
         assert len(deferred_notes) == 1
         note_stem = deferred_notes[0].stem
         assert note_stem in block, (
