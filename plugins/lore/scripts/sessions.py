@@ -262,8 +262,11 @@ def write_note_atomic(note: Path, text: str) -> bool:
         return False
 
 
-def finalize_note(note: Path, ended_iso: str) -> bool:
-    """Set status: complete + ended: on a session note.
+def finalize_note(note: Path, ended_iso: str, status: str = "complete") -> bool:
+    """Set status: <status> + ended: on a session note.
+
+    Parameterized: pass ``status="shelved"`` to shelve a note rather than
+    complete it. Default ``"complete"`` preserves all existing callers.
 
     Returns False (no-op) if the note is already terminal or has no
     frontmatter. Writes atomically so a mid-write crash leaves the original
@@ -295,7 +298,7 @@ def finalize_note(note: Path, ended_iso: str) -> bool:
     for line in fm_lines:
         stripped = line.strip()
         if stripped.startswith("status:"):
-            new_fm_lines.append("status: complete")
+            new_fm_lines.append(f"status: {status}")
             status_seen = True
         elif stripped.startswith("ended:"):
             new_fm_lines.append(f"ended: {ended_iso}")
@@ -303,12 +306,114 @@ def finalize_note(note: Path, ended_iso: str) -> bool:
         else:
             new_fm_lines.append(line)
     if not status_seen:
-        new_fm_lines.append("status: complete")
+        new_fm_lines.append(f"status: {status}")
     if not ended_seen:
         new_fm_lines.append(f"ended: {ended_iso}")
 
     new_text = "---" + "\n".join(new_fm_lines) + body
     return write_note_atomic(note, new_text)
+
+
+# Statuses from which a note can be resumed (flipped back to active).
+_RESUMABLE_STATUSES = frozenset(("shelved", "handoff"))
+
+
+def resume_note(note: Path) -> bool:
+    """Flip a shelved or handoff session note back to active.
+
+    Returns False (no-op) when the note is not in a resumable status
+    (active, complete, finalized) or has no frontmatter.
+    Writes atomically.
+    """
+    try:
+        text = note.read_text()
+    except Exception:
+        return False
+    if not text.startswith("---"):
+        return False
+    end = text.find("\n---", 3)
+    if end < 0:
+        return False
+    fm_text = text[3:end]
+    body = text[end:]
+    fm_lines = fm_text.splitlines()
+
+    current_status: str | None = None
+    for line in fm_lines:
+        stripped = line.strip()
+        if stripped.startswith("status:"):
+            current_status = stripped.split(":", 1)[1].strip().strip('"').strip("'")
+            break
+
+    if current_status not in _RESUMABLE_STATUSES:
+        return False
+
+    new_fm_lines: list[str] = []
+    for line in fm_lines:
+        stripped = line.strip()
+        if stripped.startswith("status:"):
+            new_fm_lines.append("status: active")
+        else:
+            new_fm_lines.append(line)
+
+    new_text = "---" + "\n".join(new_fm_lines) + body
+    return write_note_atomic(note, new_text)
+
+
+def _ts_sort_key(note: Path) -> str:
+    """Return a sortable timestamp string for a session note.
+
+    Prefers the ``ended:`` frontmatter field; falls back to ``started:``.
+    Returns an empty string when neither is set so missing-timestamp notes
+    sort last (empty string < any ISO timestamp).
+    """
+    try:
+        fm = frontmatter.parse_frontmatter(note)
+    except Exception:
+        return ""
+    ended = fm.get("ended") or ""
+    if isinstance(ended, str) and ended.strip():
+        return ended.strip()
+    started = fm.get("started") or ""
+    if isinstance(started, str) and started.strip():
+        return started.strip()
+    return ""
+
+
+def find_shelved_notes(vault: Path, slug: str | None = None) -> list[Path]:
+    """Return session notes whose status is in {shelved, handoff}.
+
+    Sorted most-recent-first by frontmatter timestamp (``ended:`` falling
+    back to ``started:``); notes missing both timestamps sort last.
+
+    When *slug* is given, only notes whose filename encodes exactly that
+    worktree slug are returned (same stem-parse logic as
+    ``all_session_notes_for_worktree``).
+
+    Never raises — returns [] when the sessions directory is missing or
+    unreadable.
+    """
+    sessions_dir = Path(vault) / "sessions"
+    if not sessions_dir.is_dir():
+        return []
+
+    _shelved = frozenset(("shelved", "handoff"))
+    results: list[Path] = []
+
+    for p in sessions_dir.glob("*.md"):
+        if slug is not None and _worktree_from_stem(p.stem) != slug:
+            continue
+        try:
+            fm = frontmatter.parse_frontmatter(p)
+        except Exception:
+            continue
+        if fm.get("status") in _shelved:
+            results.append(p)
+
+    # Secondary key (filename stem, which embeds YYYY-MM-DD-HHMM) makes the
+    # order deterministic across machines when frontmatter timestamps tie or are
+    # absent — otherwise ties fall back to filesystem glob() order.
+    return sorted(results, key=lambda p: (_ts_sort_key(p), p.stem), reverse=True)
 
 
 def build_action_index(vault: Path) -> dict[str, dict[str, int]]:

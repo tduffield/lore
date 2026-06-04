@@ -8,6 +8,7 @@ Subcommands:
   lore set-status <f> <v>   Validate + set a note's frontmatter status.
   lore stats                Print counts for the resolved vault.
   lore finish               Finalize the active session note for this worktree.
+  lore handoff              Shelve the active session note for pickup later.
   lore sync                 Stage, commit, and push the vault.
   lore review               Generate a vault migration-discipline report.
 
@@ -491,30 +492,18 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 # ---- finish -----------------------------------------------------------------
 
-def cmd_finish(args: argparse.Namespace) -> int:
-    """Finalize the active session note for the current worktree.
+def _get_current_status(note: Path) -> str | None:
+    """Return the current status value from a note's frontmatter, or None."""
+    try:
+        fm = frontmatter.parse_frontmatter(note)
+        status = fm.get("status")
+        return str(status) if status is not None else None
+    except Exception:
+        return None
 
-    Finds the session note via `vault.find_session_note()` scoped to this
-    worktree (cwd name), sets `status: complete` and `ended:` to the current
-    UTC timestamp (atomic write), then runs the same commit path as `lore sync`.
-    If no active session note is found, prints a notice and exits 0.
-    """
-    vault = Path(vault_mod.resolve_vault())
-    worktree_name = Path.cwd().name
 
-    session_note = vault_mod.find_session_note(vault, worktree_name=worktree_name)
-    if session_note is None:
-        print(
-            f"notice: no active session note found for worktree {worktree_name!r} — "
-            "nothing to finalize.",
-        )
-        return 0
-
-    now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    sessions_mod.finalize_note(session_note, now_iso)
-    print(f"Finalized: {session_note.name}")
-
-    # Commit path — same guards as lore sync but scoped to the session note.
+def _commit_and_push_session_note(vault: Path, session_note: Path, worktree_name: str, verb: str) -> int:
+    """Stage, commit, and push a single session note. Returns exit code."""
     if not vault.exists():
         print(f"notice: vault not found: {vault} — skipping commit.", file=sys.stderr)
         return 0
@@ -536,14 +525,13 @@ def cmd_finish(args: argparse.Namespace) -> int:
         print("Nothing to commit — vault is clean.")
         return 0
 
-    message = f"session: finalize {worktree_name}"
+    message = f"session: {verb} {worktree_name}"
     rc, _, stderr = _git(vault, "commit", "-m", message)
     if rc != 0:
         print(f"error: git commit failed: {stderr}", file=sys.stderr)
         return 1
     print(f"Committed: {message}")
 
-    # Push to origin if it exists (soft-fail).
     rc_remote, remote_url, _ = _git(vault, "remote", "get-url", "origin")
     if rc_remote != 0 or not remote_url:
         print("No origin remote — skipping push.")
@@ -559,6 +547,67 @@ def cmd_finish(args: argparse.Namespace) -> int:
         return 0
     print("Pushed to origin.")
     return 0
+
+
+def cmd_finish(args: argparse.Namespace) -> int:
+    """Finalize the active session note for the current worktree.
+
+    Finds the session note via `vault.find_session_note()` scoped to this
+    worktree (cwd name), sets `status: complete` and `ended:` to the current
+    UTC timestamp (atomic write), then runs the same commit path as `lore sync`.
+    If no active session note is found, prints a notice and exits 0.
+    """
+    vault = Path(vault_mod.resolve_vault())
+    worktree_name = Path.cwd().name
+
+    session_note = vault_mod.find_session_note(vault, worktree_name=worktree_name)
+    if session_note is None:
+        print(
+            f"notice: no active session note found for worktree {worktree_name!r} — "
+            "nothing to finalize.",
+        )
+        return 0
+
+    now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ok = sessions_mod.finalize_note(session_note, now_iso)
+    if not ok:
+        current_status = _get_current_status(session_note)
+        label = current_status if current_status else "terminal"
+        print(f"notice: already {label} — nothing to finalize.")
+        return 0
+    print(f"Finalized: {session_note.name}")
+    return _commit_and_push_session_note(vault, session_note, worktree_name, "finalize")
+
+
+# ---- handoff ----------------------------------------------------------------
+
+def cmd_handoff(args: argparse.Namespace) -> int:
+    """Shelve the active session note for the current worktree.
+
+    Mirrors `lore finish` but writes ``status: shelved`` instead of
+    ``status: complete``.  Idempotent: when the note is already in a
+    terminal status, prints a notice and returns 0 without committing.
+    """
+    vault = Path(vault_mod.resolve_vault())
+    worktree_name = Path.cwd().name
+
+    session_note = vault_mod.find_session_note(vault, worktree_name=worktree_name)
+    if session_note is None:
+        print(
+            f"notice: no active session note found for worktree {worktree_name!r} — "
+            "nothing to shelve.",
+        )
+        return 0
+
+    now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    ok = sessions_mod.finalize_note(session_note, now_iso, status="shelved")
+    if not ok:
+        current_status = _get_current_status(session_note)
+        label = current_status if current_status else "terminal"
+        print(f"notice: already {label} — nothing to do.")
+        return 0
+    print(f"Shelved: {session_note.name}")
+    return _commit_and_push_session_note(vault, session_note, worktree_name, "shelve")
 
 
 # ---- review -----------------------------------------------------------------
@@ -675,6 +724,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Finalize the active session note for this worktree",
     )
     p_finish.set_defaults(func=cmd_finish)
+
+    p_handoff = sub.add_parser(
+        "handoff",
+        help="Shelve the active session note for this worktree (for pickup later)",
+    )
+    p_handoff.set_defaults(func=cmd_handoff)
 
     p_review = sub.add_parser(
         "review",
