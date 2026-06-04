@@ -1,4 +1,4 @@
-"""P3B2-2 tests: session-note lifecycle primitives — shelve/resume.
+"""P3B2-2 / P3B2-3 fix tests: session-note lifecycle primitives — shelve/resume.
 
 TDD: tests written before implementation. All fixtures are SYNTHETIC
 (invented vocabulary, no real vault/session names).
@@ -18,6 +18,10 @@ Covers:
 - lore handoff CLI: active → shelved + commits; already-shelved → idempotent notice, no-op
 - lore finish on already-shelved note: prints "already" notice, returns 0, no "Finalized:"
 - shelved notes pass status_validator for type=session
+- lore handoff --pickup-hints-file: writes hints into ## Pickup hints AND shelves (P3B2-3 fix)
+  - hints written before shelving (note still flips to shelved)
+  - plain lore handoff (no flag) still just shelves (regression)
+  - already-shelved with hints file: idempotent no-op (does NOT double-write hints)
 """
 from __future__ import annotations
 
@@ -667,3 +671,103 @@ class TestLoreFinishOnShelvedNote:
         assert "Finalized:" not in result.stdout, (
             f"must not print false 'Finalized:'; stdout: {result.stdout!r}"
         )
+
+
+# ===========================================================================
+# lore handoff --pickup-hints-file (P3B2-3 fix)
+# ===========================================================================
+
+class TestLoreHandoffPickupHintsFile:
+    """lore handoff --pickup-hints-file writes hints into ## Pickup hints AND shelves."""
+
+    def test_writes_pickup_hints_section_and_shelves(self, tmp_path):
+        """Hints file content lands in ## Pickup hints; note flips to shelved."""
+        vault = _git_vault(tmp_path)
+        note = _write_session_note(vault, "2026-01-01-1000-alpha-worktree.md")
+        fake_cwd = tmp_path / "alpha-worktree"
+        fake_cwd.mkdir()
+        hints_file = tmp_path / "hints.md"
+        hints_file.write_text("Next: fix the widget\nBlocker: waiting on review\n")
+        result = run_cli(
+            ["handoff", "--pickup-hints-file", str(hints_file)],
+            env={"LORE_VAULT": str(vault)},
+            cwd=str(fake_cwd),
+        )
+        assert result.returncode == 0, result.stderr
+        body = note.read_text()
+        assert "## Pickup hints" in body
+        assert "Next: fix the widget" in body
+        assert "status: shelved" in body
+
+    def test_hints_written_before_shelving(self, tmp_path):
+        """The ## Pickup hints section is present in the final shelved note."""
+        vault = _git_vault(tmp_path)
+        note = _write_session_note(vault, "2026-01-01-1000-alpha-worktree.md")
+        fake_cwd = tmp_path / "alpha-worktree"
+        fake_cwd.mkdir()
+        hints_file = tmp_path / "hints.md"
+        hints_file.write_text("Blocker: upstream merge needed\n")
+        run_cli(
+            ["handoff", "--pickup-hints-file", str(hints_file)],
+            env={"LORE_VAULT": str(vault)},
+            cwd=str(fake_cwd),
+        )
+        fm = load_script("frontmatter").parse_frontmatter(note)
+        assert fm["status"] == "shelved"
+        assert "Blocker: upstream merge needed" in note.read_text()
+
+    def test_plain_handoff_still_shelves_without_hints(self, tmp_path):
+        """Plain lore handoff (no --pickup-hints-file) still just shelves (regression)."""
+        vault = _git_vault(tmp_path)
+        note = _write_session_note(vault, "2026-01-01-1000-alpha-worktree.md")
+        fake_cwd = tmp_path / "alpha-worktree"
+        fake_cwd.mkdir()
+        result = run_cli(
+            ["handoff"],
+            env={"LORE_VAULT": str(vault)},
+            cwd=str(fake_cwd),
+        )
+        assert result.returncode == 0, result.stderr
+        fm = load_script("frontmatter").parse_frontmatter(note)
+        assert fm["status"] == "shelved"
+
+    def test_already_shelved_with_hints_file_is_idempotent_noop(self, tmp_path):
+        """Already-shelved note + hints file: idempotent no-op, hints NOT double-written."""
+        vault = _git_vault(tmp_path)
+        # Write a note that's already shelved with a Pickup hints section.
+        sessions_dir = vault / "sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+        note = sessions_dir / "2026-01-01-1000-alpha-worktree.md"
+        note.write_text(
+            "---\n"
+            "type: session\n"
+            "project: test-project\n"
+            "worktree: alpha-worktree\n"
+            "branch: feature-branch\n"
+            "started: 2026-01-01T10:00:00Z\n"
+            "ended: 2026-01-01T11:00:00Z\n"
+            "subsystems: []\n"
+            "phase: Orient\n"
+            "session_id: sid-fixture\n"
+            "status: shelved\n"
+            "---\n\n"
+            "# Session: alpha-worktree\n\n"
+            "## Pickup hints\n\n"
+            "Original hint text.\n\n"
+            "## What we did\n\n"
+        )
+        fake_cwd = tmp_path / "alpha-worktree"
+        fake_cwd.mkdir()
+        hints_file = tmp_path / "hints.md"
+        hints_file.write_text("New hint text — must not appear.\n")
+        result = run_cli(
+            ["handoff", "--pickup-hints-file", str(hints_file)],
+            env={"LORE_VAULT": str(vault)},
+            cwd=str(fake_cwd),
+        )
+        assert result.returncode == 0
+        body = note.read_text()
+        # The already-shelved guard fires before writing hints — new text must not be written.
+        assert "New hint text" not in body
+        # Original content preserved.
+        assert "Original hint text." in body

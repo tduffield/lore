@@ -587,6 +587,12 @@ def cmd_handoff(args: argparse.Namespace) -> int:
     Mirrors `lore finish` but writes ``status: shelved`` instead of
     ``status: complete``.  Idempotent: when the note is already in a
     terminal status, prints a notice and returns 0 without committing.
+
+    When ``--pickup-hints-file`` is given, the file's content is written
+    under a ``## Pickup hints`` section of the session note BEFORE shelving
+    (atomic: hints + shelve happen together, never hints-only).  If the note
+    is already terminal, the idempotency guard fires BEFORE writing hints so
+    an already-shelved note is never double-written.
     """
     vault = Path(vault_mod.resolve_vault())
     worktree_name = Path.cwd().name
@@ -599,6 +605,10 @@ def cmd_handoff(args: argparse.Namespace) -> int:
         )
         return 0
 
+    hints_file: Path | None = getattr(args, "pickup_hints_file", None)
+    if hints_file is not None:
+        hints_file = Path(hints_file)
+
     now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     ok = sessions_mod.finalize_note(session_note, now_iso, status="shelved")
     if not ok:
@@ -606,6 +616,15 @@ def cmd_handoff(args: argparse.Namespace) -> int:
         label = current_status if current_status else "terminal"
         print(f"notice: already {label} — nothing to do.")
         return 0
+
+    if hints_file is not None:
+        try:
+            hints_text = hints_file.read_text()
+        except Exception as exc:
+            print(f"error: cannot read --pickup-hints-file {hints_file}: {exc}", file=sys.stderr)
+            return 1
+        frontmatter.patch_section(session_note, "Pickup hints", hints_text)
+
     print(f"Shelved: {session_note.name}")
     return _commit_and_push_session_note(vault, session_note, worktree_name, "shelve")
 
@@ -728,6 +747,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_handoff = sub.add_parser(
         "handoff",
         help="Shelve the active session note for this worktree (for pickup later)",
+    )
+    p_handoff.add_argument(
+        "--pickup-hints-file",
+        dest="pickup_hints_file",
+        default=None,
+        metavar="PATH",
+        help="File whose content is written under '## Pickup hints' before shelving",
     )
     p_handoff.set_defaults(func=cmd_handoff)
 
