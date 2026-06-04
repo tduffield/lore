@@ -61,10 +61,12 @@ _NOTE_DIRS: dict[str, str] = {
     "decision": "decisions",
     "radar": "radar",
     "subsystem": "subsystems",
+    "spec": "specs",
+    "plan": "plans",
 }
 
 # Types that carry a project: field. dead-end is intentionally absent.
-_PROJECT_BEARING: frozenset[str] = frozenset({"deferred", "decision", "radar", "subsystem"})
+_PROJECT_BEARING: frozenset[str] = frozenset({"deferred", "decision", "radar", "subsystem", "spec", "plan"})
 
 # Which section of the session note gets the backlink (None = no backlink).
 _BACKLINK_SECTIONS: dict[str, str | None] = {
@@ -73,6 +75,8 @@ _BACKLINK_SECTIONS: dict[str, str | None] = {
     "decision": "Decided",
     "radar": None,
     "subsystem": None,
+    "spec": None,
+    "plan": None,
 }
 
 
@@ -193,6 +197,14 @@ def cmd_new(args: argparse.Namespace) -> int:
     elif note_type == "subsystem":
         subs["keywords"] = _csv_to_inline_list(getattr(args, "keywords", None))
         subs["key-files"] = _csv_to_inline_list(getattr(args, "key_files", None))
+
+    elif note_type == "spec":
+        subs["subsystems"] = _csv_to_inline_list(getattr(args, "subsystems", None))
+
+    elif note_type == "plan":
+        subs["related-subsystems"] = _csv_to_inline_list(getattr(args, "related_subsystems", None))
+        subs["related-spec"] = getattr(args, "related_spec", None) or ""
+        subs["slug"] = _kebab(args.title)
 
     template_path = TEMPLATES_DIR / f"{note_type}.md"
     if not template_path.is_file():
@@ -845,6 +857,9 @@ def build_parser() -> argparse.ArgumentParser:
     # subsystem
     p_new.add_argument("--keywords", default=None, help="CSV keywords for branch-based recall (subsystem)")
     p_new.add_argument("--key-files", dest="key_files", default=None, help="CSV key file paths (subsystem)")
+    # plan
+    p_new.add_argument("--related-subsystems", dest="related_subsystems", default=None, help="CSV subsystem names (plan)")
+    p_new.add_argument("--related-spec", dest="related_spec", default=None, help="Related spec path or wikilink (plan)")
     p_new.set_defaults(func=cmd_new)
 
     p_finish = sub.add_parser(
