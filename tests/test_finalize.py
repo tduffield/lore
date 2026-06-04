@@ -206,3 +206,80 @@ class TestLoreFinishNonGitVault:
         fm = load_script("frontmatter").parse_frontmatter(note)
         assert fm["status"] == "complete"
         assert not (vault / ".git").exists()
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 regression: already-complete note + untracked stray file → exit 0, no commit
+# ---------------------------------------------------------------------------
+
+class TestFinishNoopWithStrayUntracked:
+    """Regression guard for the git status --porcelain bug.
+
+    When the session note is already complete (nothing to stage after `lore
+    finish` marks it), an unrelated untracked file in the vault must NOT cause
+    cmd_finish to attempt a commit on an empty index — which would make git exit
+    1 and propagate a false failure.  The gate must be on the staged index
+    (`git diff --cached --quiet`), not the working tree.
+    """
+
+    def _seed_complete_note(self, vault: Path, worktree: str = "my-worktree") -> Path:
+        """Seed a session note that is ALREADY complete (status: complete)."""
+        sessions_dir = vault / "sessions"
+        sessions_dir.mkdir(parents=True, exist_ok=True)
+        note = sessions_dir / f"2026-06-02-1200-{worktree}.md"
+        note.write_text(
+            f"---\n"
+            f"type: session\n"
+            f"project: test-project\n"
+            f"worktree: {worktree}\n"
+            f"branch: main\n"
+            f"started: 2026-06-02T12:00:00Z\n"
+            f"ended: 2026-06-02T13:00:00Z\n"
+            f"subsystems: []\n"
+            f"phase: Orient\n"
+            f"session_id: sid-1\n"
+            f"status: complete\n"
+            f"---\n\n"
+            f"# Session: {worktree}\n\n"
+            f"## What we did\n\nDone.\n"
+        )
+        return note
+
+    def test_noop_finish_with_stray_untracked_exits_zero(self, tmp_path):
+        """Already-complete note + untracked stray file → cmd_finish returns 0."""
+        vault = _git_vault(tmp_path)
+        self._seed_complete_note(vault, worktree="my-worktree")
+        # commit the complete note so the vault is clean
+        subprocess.run(["git", "-C", str(vault), "add", "-A"],
+                       check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(vault), "commit", "-m", "baseline"],
+                       check=True, capture_output=True)
+        # add an unrelated untracked file (not staged, not committed)
+        stray = vault / "sessions" / "scratch-untracked.md"
+        stray.write_text("# Not yet tracked\n")
+        commit_count_before = subprocess.run(
+            ["git", "-C", str(vault), "rev-list", "--count", "HEAD"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+
+        fake_cwd = tmp_path / "my-worktree"
+        fake_cwd.mkdir(exist_ok=True)
+        result = run_cli(
+            ["finish"],
+            env={"LORE_VAULT": str(vault)},
+            cwd=str(fake_cwd),
+        )
+
+        assert result.returncode == 0, (
+            f"cmd_finish must return 0 for a no-op finish with a stray untracked file.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+        # no new commit should have been made
+        commit_count_after = subprocess.run(
+            ["git", "-C", str(vault), "rev-list", "--count", "HEAD"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        assert commit_count_before == commit_count_after, (
+            f"cmd_finish must NOT commit when there is nothing staged "
+            f"(commits before={commit_count_before}, after={commit_count_after})."
+        )

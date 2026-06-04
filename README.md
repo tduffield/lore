@@ -71,7 +71,7 @@ for your current worktree and loads the baseline vault index into context.
 | `/lore:radar` | Add a radar watch item |
 | `/lore:subsystem` | Create or update a subsystem profile |
 | `/lore:checkpoint` | Mid-session snapshot — harvest state into the session note |
-| `/lore:finished` | End-of-session wrap-up — fill, finalize, and commit |
+| `/lore:finished` | Canonical end-of-session finish — fill, finalize, expand harvest-pending, and commit |
 | `/lore:vault-sync` | Commit and push the vault |
 | `/lore:ping` | Confirm the plugin is installed and show the resolved vault path |
 
@@ -85,7 +85,7 @@ lore new <type>           Render a template and write a new vault note
 lore patch <file> <sec>   Append text under a named section (--text or stdin)
 lore set-status <f> <v>   Validate and flip a note's frontmatter status
 lore stats                Print vault counts
-lore finish               Finalize the active session note and commit
+lore finish               Finalize the session note, expand harvest-pending into vault notes, and commit
 lore sync                 Stage, commit, and push the vault
 ```
 

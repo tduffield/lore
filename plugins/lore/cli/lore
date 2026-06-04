@@ -35,6 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import frontmatter  # noqa: E402
+import harvest as harvest_mod  # noqa: E402
 import review as review_mod  # noqa: E402
 import sessions as sessions_mod  # noqa: E402
 import status_validator  # noqa: E402
@@ -565,15 +566,105 @@ def _commit_and_push_session_note(vault: Path, session_note: Path, worktree_name
     return 0
 
 
+def _harvest_expand(vault: Path, session_note: Path) -> harvest_mod.ExpansionResult | None:
+    """Expand harvest-pending + the session note's candidates block to disk.
+
+    Writes the expanded notes (idempotent by harvest-hash) but does NOT touch
+    the pending file or git — the caller folds the pending rewrite into the
+    same atomic commit. Returns None when there is no pending file to read.
+    """
+    pending = vault / "harvest-pending.md"
+    pending_text = pending.read_text(encoding="utf-8") if pending.exists() else ""
+    try:
+        session_text = session_note.read_text(encoding="utf-8")
+    except Exception:
+        session_text = ""
+
+    project = vault_mod.resolve_project()
+    return harvest_mod.expand(
+        vault=vault,
+        pending_text=pending_text,
+        session_text=session_text,
+        templates_dir=TEMPLATES_DIR,
+        today=_today(),
+        project=project,
+    )
+
+
+def _report_harvest(result: harvest_mod.ExpansionResult) -> None:
+    for path in result.written:
+        print(f"Harvested: {path}")
+    for warning in result.warnings:
+        print(warning, file=sys.stderr)
+    if result.gotchas:
+        print("Surfaced gotchas (not expanded — patch via /lore:subsystem):")
+        for g in result.gotchas:
+            print(f"  - gotcha: {g.body}")
+
+
+def _finish_commit(
+    vault: Path,
+    session_note: Path,
+    pending: Path,
+    new_notes: list[Path],
+    worktree_name: str,
+) -> int:
+    """Stage explicit paths + commit the session note, new notes, and pending
+    in a SINGLE commit. Never `git add -A`. On commit failure the notes remain
+    on disk and the (unrewritten) pending still holds the entries, so a re-run
+    re-expands cleanly (dedup-by-hash). Returns exit code."""
+    if not vault.exists() or not _vault_is_git_toplevel(vault):
+        print("notice: vault is not its own git toplevel — skipping commit.", file=sys.stderr)
+        return 0
+
+    paths = [str(session_note)] + [str(p) for p in new_notes]
+    if pending.exists():
+        paths.append(str(pending))
+
+    rc, _, stderr = _git(vault, "add", "--", *paths)
+    if rc != 0:
+        print(f"error: git add failed: {stderr}", file=sys.stderr)
+        return 1
+
+    rc, _, _ = _git(vault, "diff", "--cached", "--quiet")
+    if rc == 0:
+        print("Nothing to commit — index is clean.")
+        return 0
+
+    message = f"session: finalize {worktree_name}"
+    rc, _, stderr = _git(vault, "commit", "-m", message)
+    if rc != 0:
+        print(f"error: git commit failed: {stderr}", file=sys.stderr)
+        return 1
+    print(f"Committed: {message}")
+
+    rc_remote, remote_url, _ = _git(vault, "remote", "get-url", "origin")
+    if rc_remote != 0 or not remote_url:
+        print("No origin remote — skipping push.")
+        return 0
+    rc_push, _, stderr_push = _git(vault, "push", "origin")
+    if rc_push != 0:
+        print("notice: committed locally; push failed — re-run `lore sync` when online", file=sys.stderr)
+        print(f"  push error: {stderr_push}", file=sys.stderr)
+        return 0
+    print("Pushed to origin.")
+    return 0
+
+
 def cmd_finish(args: argparse.Namespace) -> int:
     """Finalize the active session note for the current worktree.
 
     Resolves the session note via `vault.resolve_session_note()` — exact
     session-id match first (so the *current* session's note is finalized even
     when several exist for this worktree), then a worktree-name fallback. Sets
-    `status: complete` and `ended:` to the current UTC timestamp (atomic
-    write), then runs the same commit path as `lore sync`. If no active
-    session note is found, prints a notice and exits 0.
+    `status: complete` and `ended:` (atomic write), then expands the in-scope
+    harvest-pending entries + the note's `## Harvest candidates` block into full
+    vault notes and commits the session note + new notes + the rewritten pending
+    in ONE commit (explicit paths only). `gotcha` entries are surfaced (not
+    expanded) and left in pending; malformed lines are retained + warned. On
+    commit failure the notes are on disk and pending is restored, so a re-run
+    re-expands idempotently. If no active session note is found, prints a notice
+    and exits 0.
     """
     vault = Path(vault_mod.resolve_vault())
     session_id = _session_id_from_args_or_env(args)
@@ -591,13 +682,46 @@ def cmd_finish(args: argparse.Namespace) -> int:
 
     now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     ok = sessions_mod.finalize_note(session_note, now_iso)
-    if not ok:
+    if ok:
+        print(f"Finalized: {session_note.name}")
+    else:
+        # Already terminal. Still attempt harvest expansion: a prior finish may
+        # have finalized the note but failed to commit the harvest (e.g. a
+        # failed commit), leaving pending entries to recover. If there is no
+        # pending work, the expansion + commit are both no-ops.
         current_status = _get_current_status(session_note)
         label = current_status if current_status else "terminal"
-        print(f"notice: already {label} — nothing to finalize.")
+        print(f"notice: already {label} — checking for unharvested pending entries.")
+
+    # Expand harvest entries to disk FIRST (notes survive a failed commit).
+    result = _harvest_expand(vault, session_note)
+    if result is not None:
+        _report_harvest(result)
+
+    if not _vault_is_git_toplevel(vault):
+        # Non-git vault: status is set, notes are written, but no commit.
+        print("notice: vault is not its own git toplevel — skipping commit.", file=sys.stderr)
         return 0
-    print(f"Finalized: {session_note.name}")
-    return _commit_and_push_session_note(vault, session_note, worktree_name, "finalize")
+
+    # Rewrite pending to drop consumed entries — but ONLY as part of the same
+    # commit. We write it to disk here, then stage+commit; if the commit fails,
+    # the consumed entries were already cleared from the working tree, so we
+    # restore the file on failure to keep the entries recoverable.
+    pending = vault / "harvest-pending.md"
+    pending_before = pending.read_text(encoding="utf-8") if pending.exists() else None
+    if result is not None and result.consumed_hashes and pending_before is not None:
+        pending.write_text(
+            harvest_mod.rewrite_pending(pending_before, result.consumed_hashes),
+            encoding="utf-8",
+        )
+
+    new_notes = result.written if result is not None else []
+    rc = _finish_commit(vault, session_note, pending, new_notes, worktree_name)
+    if rc != 0 and pending_before is not None:
+        # Commit failed: restore pending so no entry is lost; notes stay on disk
+        # and a clean re-run re-expands idempotently (dedup-by-hash).
+        pending.write_text(pending_before, encoding="utf-8")
+    return rc
 
 
 # ---- handoff ----------------------------------------------------------------

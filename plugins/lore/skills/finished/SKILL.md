@@ -1,11 +1,29 @@
 ---
 name: finished
-description: End-of-session wrap-up — fill in the session note sections (What we did / Decided / Learned / Open questions), run `lore finish` to set status=complete and commit. Use for /finished, "I'm done", "wrap up", "close this out", "finalize the session".
+description: "Canonical end-of-session finish — fill in the session note sections (What we did / Decided / Learned / Open questions), run `lore finish` to set status=complete, expand harvest-pending into vault notes, and commit. Use for /finished, \"I'm done\", \"wrap up\", \"close this out\", \"finalize the session\"."
 ---
 
-# Finished — end-of-session wrap-up
+# Finished — canonical end-of-session finish
 
-Fills the session note from in-context synthesis, then calls `lore finish` to set `status: complete`, stamp `ended:`, and commit.
+`lore:finished` is the canonical end-of-session finish. It fills the session
+note from in-context synthesis, then calls `lore finish`, which:
+
+1. Sets `status: complete` and stamps `ended:`.
+2. Reads `harvest-pending.md` and the session note's `## Harvest candidates`
+   block; expands each typed one-liner of the five in-scope types
+   (`deferred` / `decision` / `dead-end` / `radar` / `lesson`) into a full
+   templated note in the matching vault directory.
+3. Surfaces `gotcha` entries in the finish report for manual
+   `/lore:subsystem` patching — they are NOT auto-expanded and remain in
+   `harvest-pending.md`.
+4. Retains malformed or unmarked lines in `harvest-pending.md` with a
+   warning rather than silently consuming them.
+5. Commits the session note + new notes + the rewritten `harvest-pending.md`
+   in a single atomic commit (explicit paths only — unrelated vault files are
+   not swept in).
+
+The heavy lifting (expansion, dedup, commit) is all in the CLI. The skill's
+job is to draft the session note sections, write them, and call `lore finish`.
 
 ## Process
 
@@ -58,7 +76,12 @@ Alternatively, open the note in an Edit call and fill in the sections directly i
 lore finish
 ```
 
-This sets `status: complete` and `ended:` to the current UTC timestamp, then commits the session note. If no origin remote is configured, the commit is made locally and a notice is printed — relay that notice.
+This finalizes the session note, expands the harvest-pending entries into vault
+notes, and commits everything in one shot. Relay any notices printed (push
+failure, no remote, surfaced gotchas).
+
+**Gotchas in the report:** if `lore finish` prints surfaced `gotcha` entries,
+tell the user — they need a manual `/lore:subsystem` patch to record them.
 
 ### Step 5 — Report to the user
 
@@ -66,12 +89,16 @@ This sets `status: complete` and `ended:` to the current UTC timestamp, then com
 Finalized `sessions/<file>`.
 
 What we did: <one-line summary>
+Harvested: <N notes written> (or: nothing new to harvest).
 Committed and pushed (or: committed locally — no remote).
 ```
+
+If gotchas were surfaced, append them so the user can act on each one.
 
 ## Edge cases
 
 - **No session note.** Unusual — the SessionStart hook should have created one. Tell the user and offer to create one manually before calling `lore finish`.
-- **Session note already `complete`.** `lore finish` detects this and exits 0 without re-writing. Report it and stop.
-- **Non-git vault.** `lore finish` will write the frontmatter update but skip the commit (notice on stderr). Relay the notice.
-- **`lore finish` exits non-zero.** Report the error; do not retry silently.
+- **Session note already `complete`.** `lore finish` still checks for unharvested pending entries; if pending is clear it exits cleanly. Report the notice.
+- **Non-git vault.** `lore finish` will write the frontmatter update and expand notes but skip the commit (notice on stderr). Relay the notice.
+- **`lore finish` exits non-zero.** Report the error; do not retry silently. Expanded notes are already on disk and pending is unchanged, so a re-run after fixing the issue re-expands idempotently.
+- **Malformed/unmarked lines in `harvest-pending.md`.** `lore finish` warns about them and leaves them in place. Relay the warning so the user can clean them up manually.
