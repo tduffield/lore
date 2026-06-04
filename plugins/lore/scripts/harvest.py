@@ -309,9 +309,11 @@ def expand(
 
     for entry in pending_entries + session_entries:
         if entry.kind == GOTCHA:
-            # Only surface gotchas that came from the pending file (left in place).
-            if entry in pending_entries:
-                result.gotchas.append(entry)
+            # Surface gotchas from both pending and the session note.
+            # Pending gotchas are left in place (not consumed); session-note
+            # gotchas live in the committed note verbatim — don't add to
+            # consumed_hashes in either case.
+            result.gotchas.append(entry)
             continue
         if entry.kind not in _TYPE_DIRS:
             continue

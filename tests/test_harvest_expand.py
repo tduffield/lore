@@ -226,6 +226,42 @@ class TestGotchaSurfaced:
         _finish(vault, tmp_path)
         assert "h:ffffffffffff" in pending.read_text()
 
+    def test_session_note_gotcha_is_surfaced(self, tmp_path):
+        """A gotcha in the session note's ## Harvest candidates is surfaced.
+
+        Session-note gotchas are NOT added to consumed_hashes (the session note
+        is committed verbatim — the entry stays in it), but the operator must
+        see them in the finish report so they can manually patch the subsystem.
+        """
+        vault = _git_vault(tmp_path)
+        # No pending entries — only a session-note gotcha.
+        (vault / "harvest-pending.md").write_text("# Harvest pending\n\nStaging area.\n")
+        note = vault / "sessions" / "2026-06-04-1000-widget-worktree.md"
+        note.write_text(
+            "---\n"
+            "type: session\n"
+            "project: test-project\n"
+            "worktree: widget-worktree\n"
+            "branch: main\n"
+            "started: 2026-06-04T10:00:00Z\n"
+            "ended:\n"
+            "subsystems: []\n"
+            "phase: Orient\n"
+            "session_id: sid-2\n"
+            "status: active\n"
+            "---\n\n"
+            "# Session: widget-worktree\n\n"
+            "## What we did\n\n"
+            "## Harvest candidates\n\n"
+            "- gotcha: the sprocket cache silently drops entries when the TTL overflows. "
+            "Where it bit: sprocket_cache.py:42.  <!-- h:cccc2222cccc -->\n"
+        )
+        _commit_baseline(vault)
+        result = _finish(vault, tmp_path)
+        out = result.stdout + result.stderr
+        assert "gotcha" in out.lower(), f"expected 'gotcha' in output; got: {out!r}"
+        assert "sprocket cache" in out, f"expected gotcha body in output; got: {out!r}"
+
 
 # ---------------------------------------------------------------------------
 # (d) malformed line retained + warned

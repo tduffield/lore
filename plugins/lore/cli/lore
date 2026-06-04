@@ -626,9 +626,9 @@ def _finish_commit(
         print(f"error: git add failed: {stderr}", file=sys.stderr)
         return 1
 
-    rc, status_out, _ = _git(vault, "status", "--porcelain")
-    if rc != 0 or not status_out.strip():
-        print("Nothing to commit — vault is clean.")
+    rc, _, _ = _git(vault, "diff", "--cached", "--quiet")
+    if rc == 0:
+        print("Nothing to commit — index is clean.")
         return 0
 
     message = f"session: finalize {worktree_name}"
