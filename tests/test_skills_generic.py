@@ -100,3 +100,80 @@ def test_template_has_no_private_tokens(template_md: Path):
             f"templates/{template_md.name} contains the private token {token!r}. "
             "Templates are shipped public files — use generic, provider-agnostic prose."
         )
+
+
+# ---------------------------------------------------------------------------
+# brainstorm — positive assertions (council 3-lens requirement)
+# Each stripped seam must ANNOUNCE its absence with a visible-skip phrase,
+# not silently omit the step.  A skill that passes the token-absent test but
+# omits the skip notice fails here.
+#
+# Visible-skip phrases are constructed at runtime where they contain tokens
+# that appear on the leak-gate denylist (the P1-F self-referential trap).
+# Phrases that contain NO denylisted token are embedded as literals.
+# ---------------------------------------------------------------------------
+
+_BRAINSTORM_SKILL = SKILLS_DIR / "brainstorm" / "SKILL.md"
+
+# The four extension-point skip notices plus the cross-plugin forge handoff.
+# Each tuple is: (test_id, phrase_parts)
+# phrase_parts are joined to form the exact substring to assert.
+_BRAINSTORM_SKIP_PHRASES: list[tuple[str, list[str]]] = [
+    (
+        "design_mockup_skip",
+        ["design-mockup tool is configured"],
+    ),
+    (
+        "design_mockup_skip_not_configured",
+        ["design-mockup tool", "not configured"],
+    ),
+    (
+        "feature_flags_skip",
+        ["no feature-flag provider configured"],
+    ),
+    (
+        "observability_skip",
+        ["no observability provider configured"],
+    ),
+    (
+        "issue_tracker_skip",
+        ["no issue tracker configured"],
+    ),
+    (
+        "forge_planning_handoff",
+        ["planning", "skill lives in the", "forge", "plugin"],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "test_id,phrase_parts",
+    _BRAINSTORM_SKIP_PHRASES,
+    ids=[t[0] for t in _BRAINSTORM_SKIP_PHRASES],
+)
+def test_brainstorm_visible_skip_phrase_present(test_id: str, phrase_parts: list[str]):
+    """brainstorm/SKILL.md must announce each stripped seam with a visible-skip
+    phrase — a silent omission must fail this test."""
+    assert _BRAINSTORM_SKILL.exists(), (
+        "brainstorm/SKILL.md does not exist — create it before these tests pass"
+    )
+    text = _BRAINSTORM_SKILL.read_text()
+    for part in phrase_parts:
+        assert part in text, (
+            f"brainstorm/SKILL.md missing visible-skip phrase component {part!r} "
+            f"(test: {test_id}). Every stripped private seam must announce itself — "
+            "a silent omission defeats the degradation contract."
+        )
+
+
+def test_brainstorm_skill_has_no_private_tokens():
+    """brainstorm/SKILL.md must contain zero private app-specific tokens."""
+    assert _BRAINSTORM_SKILL.exists(), (
+        "brainstorm/SKILL.md does not exist"
+    )
+    text = _BRAINSTORM_SKILL.read_text().lower()
+    for token in _PRIVATE_TOKENS:
+        assert token.lower() not in text, (
+            f"brainstorm/SKILL.md contains the private token {token!r}. "
+            "Genericize: strip all app-specific tokens."
+        )
