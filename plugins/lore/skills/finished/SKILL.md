@@ -11,15 +11,16 @@ Fills the session note from in-context synthesis, then calls `lore finish` to se
 
 ### Step 1 — Locate and check the session note
 
-Find the active session note for this worktree:
+Find the active session note for this session (resolves by id, falling back to
+the worktree name — prints a vault-relative path):
 
 ```bash
-ls "$LORE_VAULT/sessions/" | grep "$(basename $PWD)$" | sort | tail -1
+lore session-note
 ```
 
 Read it:
 ```bash
-cat "$LORE_VAULT/sessions/<note-name>"
+cat "$LORE_VAULT/$(lore session-note)"
 ```
 
 Check frontmatter `status`. If already `complete` or `shelved`: report "Already finalized" and stop.
@@ -44,7 +45,7 @@ Keep bullets tight — a future reader should skim in 30 seconds.
 For each section with content:
 
 ```bash
-lore patch "$LORE_VAULT/sessions/<note-name>" "<Section>" --text "<bullets>"
+lore patch "$LORE_VAULT/$(lore session-note)" "<Section>" --text "<bullets>"
 ```
 
 One call per section. Sections with nothing new are left untouched.

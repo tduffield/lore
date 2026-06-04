@@ -126,3 +126,108 @@ def find_session_note(vault: Path, worktree_name: str | None = None) -> Path | N
         reverse=True,
     )
     return notes[0] if notes else None
+
+
+def find_session_note_by_session_id(vault: Path, session_id: str) -> Path | None:
+    """Return the session note whose frontmatter carries ``session_id: <id>``.
+
+    This is the exact, cwd-independent resolver: the id is written into the
+    note's frontmatter at creation time, so a match is unambiguous regardless
+    of where the caller's cwd happens to be (sibling repo, subdir, canonical
+    checkout). Only the frontmatter block is inspected — a ``session_id:``
+    string appearing in the body never counts.
+
+    Returns None when the id is empty, the sessions dir is missing, or no note
+    matches. Never raises.
+    """
+    if not session_id:
+        return None
+    sessions_dir = Path(vault) / "sessions"
+    if not sessions_dir.is_dir():
+        return None
+
+    needle = f"session_id: {session_id}"
+    matches: list[Path] = []
+    for p in sessions_dir.glob("*.md"):
+        try:
+            text = p.read_text()
+        except Exception:
+            continue
+        if not text.startswith("---"):
+            continue
+        end = text.find("\n---", 3)  # close of the frontmatter block
+        front = text[:end] if end >= 0 else text
+        if any(line.strip() == needle for line in front.splitlines()):
+            matches.append(p)
+    if not matches:
+        return None
+    # Pathological: two notes share an id → prefer the newest stem.
+    return sorted(matches, reverse=True)[0]
+
+
+# A `.claude/worktrees/<name>/` path segment marks a Claude Code worktree.
+_WORKTREES_RE = re.compile(r"/\.claude/worktrees/([^/]+)")
+
+
+def detect_worktree_name(cwd: Path | None = None) -> str:
+    """Best-effort worktree name for the current session.
+
+    Mirrors how the session-note filename is *created* (the SessionStart hook
+    names it from ``$CLAUDE_PROJECT_DIR`` basename), so resolution matches
+    creation. Order:
+
+      1. ``$CLAUDE_PROJECT_DIR`` basename — the tightest match.
+      2. A ``.claude/worktrees/<name>/`` segment anywhere in the path → ``<name>``
+         (handles sibling-repo or subdir cwds inside a worktree).
+      3. git toplevel basename (a subdir of a plain checkout).
+      4. cwd basename.
+
+    Never raises.
+    """
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR", "").strip()
+    if project_dir:
+        m = _WORKTREES_RE.search(project_dir)
+        return m.group(1) if m else Path(project_dir).name
+
+    target = Path(cwd) if cwd is not None else Path.cwd()
+    target_str = str(target)
+
+    m = _WORKTREES_RE.search(target_str)
+    if m:
+        return m.group(1)
+
+    try:
+        result = subprocess.run(
+            ["git", "-C", target_str, "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=5,
+        )
+        top = (result.stdout or "").strip()
+        if top and result.returncode == 0:
+            m = _WORKTREES_RE.search(top)
+            return m.group(1) if m else Path(top).name
+    except Exception:
+        pass
+
+    return target.name
+
+
+def resolve_session_note(
+    vault: Path,
+    session_id: str | None = None,
+    worktree_name: str | None = None,
+    cwd: Path | None = None,
+) -> Path | None:
+    """Resolve the session note for the current session.
+
+    Order: exact session-id frontmatter match (cwd-independent) → worktree-name
+    fallback (newest by filename timestamp). ``worktree_name`` defaults to
+    :func:`detect_worktree_name` when not supplied. Returns None when nothing
+    resolves.
+    """
+    if session_id:
+        hit = find_session_note_by_session_id(vault, session_id)
+        if hit is not None:
+            return hit
+    if worktree_name is None:
+        worktree_name = detect_worktree_name(cwd)
+    return find_session_note(vault, worktree_name=worktree_name or None)
