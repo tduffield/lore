@@ -494,6 +494,104 @@ def _get_tree_files(vault: Path) -> set[str]:
     return set(r.stdout.strip().splitlines())
 
 
+class TestBucketedScan:
+    """Slice 4: plans/specs/designs index regeneration recurses one level into
+    YYYY-MM/ buckets and emits resolvable vault-relative wikilinks. Out-of-scope
+    folders (deferred/radar/lessons) stay flat.
+
+    Lore cannot import the brain auditor, so link correctness is asserted on the
+    emitted string: it must be the resolvable `[[plans/2026-06/foo]]` form and
+    must NOT be the broken `[[2026-06/foo]]` form.
+    """
+
+    def test_plans_index_lists_notes_across_two_buckets(self, tmp_path):
+        vault = _make_vault(tmp_path, "plans/2026-05", "plans/2026-06")
+        (vault / "plans" / "2026-05" / "synth-alpha-plan.md").write_text(
+            "---\ntype: plan\nstatus: in-progress\nupdated: '2026-05-10'\n"
+            "created: 2026-05-01T00:00:00.000Z\n---\n\n# synth-alpha-plan\n\nSynthetic.\n"
+        )
+        (vault / "plans" / "2026-06" / "synth-beta-plan.md").write_text(
+            "---\ntype: plan\nstatus: in-progress\nupdated: '2026-06-20'\n"
+            "created: 2026-06-01T00:00:00.000Z\n---\n\n# synth-beta-plan\n\nSynthetic.\n"
+        )
+        rc = _run_main(vault)
+        assert rc == 0
+        content = (vault / "plans" / "_index.md").read_text()
+        assert "synth-alpha-plan" in content
+        assert "synth-beta-plan" in content
+
+    def test_bucketed_link_is_resolvable_not_broken_form(self, tmp_path):
+        vault = _make_vault(tmp_path, "plans/2026-06")
+        (vault / "plans" / "2026-06" / "synth-widget-plan.md").write_text(
+            "---\ntype: plan\nstatus: in-progress\nupdated: '2026-06-01'\n"
+            "created: 2026-06-01T00:00:00.000Z\n---\n\n# synth-widget-plan\n\nSynthetic.\n"
+        )
+        _run_main(vault)
+        content = (vault / "plans" / "_index.md").read_text()
+        assert "[[2026-06/synth-widget-plan]]" not in content, "broken parent-only link emitted"
+        assert "[[plans/2026-06/synth-widget-plan]]" in content, "resolvable vault-relative link missing"
+
+    def test_specs_index_across_two_buckets(self, tmp_path):
+        vault = _make_vault(tmp_path, "specs/2026-05", "specs/2026-06")
+        (vault / "specs" / "2026-05" / "synth-alpha-spec.md").write_text(
+            "---\ntype: spec\nstatus: draft\nupdated: '2026-05-10'\n"
+            "created: 2026-05-01T00:00:00.000Z\n---\n\n# synth-alpha-spec\n\nSynthetic.\n"
+        )
+        (vault / "specs" / "2026-06" / "synth-beta-spec.md").write_text(
+            "---\ntype: spec\nstatus: draft\nupdated: '2026-06-20'\n"
+            "created: 2026-06-01T00:00:00.000Z\n---\n\n# synth-beta-spec\n\nSynthetic.\n"
+        )
+        _run_main(vault)
+        content = (vault / "specs" / "_index.md").read_text()
+        assert "synth-alpha-spec" in content
+        assert "synth-beta-spec" in content
+        assert "[[specs/2026-06/synth-beta-spec]]" in content
+
+    def test_underscore_files_and_dirs_skipped_in_buckets(self, tmp_path):
+        vault = _make_vault(tmp_path, "plans/_archive", "plans/_test")
+        _write_plan(vault, "synth-real-plan")
+        (vault / "plans" / "_archive" / "synth-archived-plan.md").write_text(
+            "---\ntype: plan\nstatus: in-progress\nupdated: '2026-06-01'\n"
+            "created: 2026-06-01T00:00:00.000Z\n---\n\n# synth-archived-plan\n\nSynthetic.\n"
+        )
+        (vault / "plans" / "_test" / "synth-test-plan.md").write_text(
+            "---\ntype: plan\nstatus: in-progress\nupdated: '2026-06-01'\n"
+            "created: 2026-06-01T00:00:00.000Z\n---\n\n# synth-test-plan\n\nSynthetic.\n"
+        )
+        _run_main(vault)
+        content = (vault / "plans" / "_index.md").read_text()
+        assert "synth-real-plan" in content
+        assert "synth-archived-plan" not in content
+        assert "synth-test-plan" not in content
+
+    def test_flat_and_bucketed_both_listed_transition_safe(self, tmp_path):
+        vault = _make_vault(tmp_path, "plans/2026-06")
+        _write_plan(vault, "synth-still-flat-plan")
+        (vault / "plans" / "2026-06" / "synth-bucketed-plan.md").write_text(
+            "---\ntype: plan\nstatus: in-progress\nupdated: '2026-06-01'\n"
+            "created: 2026-06-01T00:00:00.000Z\n---\n\n# synth-bucketed-plan\n\nSynthetic.\n"
+        )
+        _run_main(vault)
+        content = (vault / "plans" / "_index.md").read_text()
+        assert "synth-still-flat-plan" in content
+        assert "synth-bucketed-plan" in content
+        assert "[[plans/synth-still-flat-plan]]" in content
+        assert "[[plans/2026-06/synth-bucketed-plan]]" in content
+
+    def test_out_of_scope_folder_stays_flat(self, tmp_path):
+        """A note in deferred/2026-06/ must NOT be picked up (deferred is flat)."""
+        vault = _make_vault(tmp_path, "deferred/2026-06")
+        _write_deferred(vault, "synth-flat-deferred")
+        (vault / "deferred" / "2026-06" / "synth-nested-deferred.md").write_text(
+            "---\ntype: deferred\nstatus: open\nvalue: high\neffort: S\n"
+            "revisit-after: 2099-06-01\n---\n\n# synth-nested-deferred\n\nSynthetic.\n"
+        )
+        _run_main(vault)
+        content = (vault / "deferred" / "_index.md").read_text()
+        assert "synth-flat-deferred" in content
+        assert "synth-nested-deferred" not in content
+
+
 class TestPreCommitHookStagesIndices:
     """The pre-commit hook must stage regenerated _index.md files so they
     are included in the commit being made (P1-D's lesson: unstaged changes
