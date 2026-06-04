@@ -11,7 +11,8 @@ Subcommands:
   lore finish               Finalize the active session note for this worktree.
   lore handoff              Shelve the active session note for pickup later.
   lore shelved              List shelved/handoff session notes for pickup.
-  lore resume <note|slug>   Flip a shelved/handoff note back to active.
+  lore resume [note|slug]   Flip a shelved/handoff note back to active
+                            (omit the target to resume the current session).
   lore sync                 Stage, commit, and push the vault.
   lore review               Generate a vault migration-discipline report.
 
@@ -576,7 +577,7 @@ def cmd_finish(args: argparse.Namespace) -> int:
     """
     vault = Path(vault_mod.resolve_vault())
     session_id = _session_id_from_args_or_env(args)
-    worktree_name = vault_mod.detect_worktree_name()
+    worktree_name = args.worktree or vault_mod.detect_worktree_name()
 
     session_note = vault_mod.resolve_session_note(
         vault, session_id=session_id, worktree_name=worktree_name
@@ -619,7 +620,7 @@ def cmd_handoff(args: argparse.Namespace) -> int:
     """
     vault = Path(vault_mod.resolve_vault())
     session_id = _session_id_from_args_or_env(args)
-    worktree_name = vault_mod.detect_worktree_name()
+    worktree_name = args.worktree or vault_mod.detect_worktree_name()
 
     session_note = vault_mod.resolve_session_note(
         vault, session_id=session_id, worktree_name=worktree_name
@@ -740,17 +741,35 @@ def _resolve_resume_target(vault: Path, target: str) -> Path | None:
     return matches[0] if matches else None
 
 
+def _resolve_implicit_resume_target(vault: Path, args: argparse.Namespace) -> Path | None:
+    """Resolve the resume target when no positional was given: exact
+    session-id match (any status — `resume_note` rejects non-shelved notes),
+    else the most-recent shelved note for the worktree (override or detected)."""
+    session_id = _session_id_from_args_or_env(args)
+    if session_id:
+        return vault_mod.find_session_note_by_session_id(vault, session_id)
+    worktree_name = args.worktree or vault_mod.detect_worktree_name()
+    matches = sessions_mod.find_shelved_notes(vault, slug=worktree_name)
+    return matches[0] if matches else None
+
+
 def cmd_resume(args: argparse.Namespace) -> int:
     """Flip a shelved/handoff session note back to active.
 
-    Accepts an explicit note path OR a worktree slug. On a non-resumable note
+    With a positional target, accepts an explicit note path OR a worktree slug.
+    With no target, resolves the current session's shelved note (``--session-id``
+    → ``--worktree`` → auto-detected worktree). On a non-resumable note
     (active/complete/finalized) prints a clear no-op message and returns 0.
     A target that resolves to nothing is an error (non-zero).
     """
     vault = Path(vault_mod.resolve_vault())
-    note = _resolve_resume_target(vault, args.target)
+    if args.target:
+        note = _resolve_resume_target(vault, args.target)
+    else:
+        note = _resolve_implicit_resume_target(vault, args)
     if note is None:
-        print(f"error: no shelved note found for {args.target!r}", file=sys.stderr)
+        label = args.target or args.worktree or _session_id_from_args_or_env(args) or "current worktree"
+        print(f"error: no shelved note found for {label!r}", file=sys.stderr)
         return 1
 
     if sessions_mod.resume_note(note):
@@ -940,16 +959,29 @@ def build_parser() -> argparse.ArgumentParser:
     p_new.add_argument("--related-spec", dest="related_spec", default=None, help="Related spec path or wikilink (plan)")
     p_new.set_defaults(func=cmd_new)
 
+    def _add_session_selectors(p: argparse.ArgumentParser) -> None:
+        """Shared overrides for the auto-detected session note."""
+        p.add_argument(
+            "--session-id", dest="session_id", default=None,
+            help="Session id to target (default: $CLAUDE_CODE_SESSION_ID)",
+        )
+        p.add_argument(
+            "--worktree", default=None,
+            help="Worktree name for the fallback (default: auto-detected)",
+        )
+
     p_finish = sub.add_parser(
         "finish",
         help="Finalize the active session note for this worktree",
     )
+    _add_session_selectors(p_finish)
     p_finish.set_defaults(func=cmd_finish)
 
     p_handoff = sub.add_parser(
         "handoff",
         help="Shelve the active session note for this worktree (for pickup later)",
     )
+    _add_session_selectors(p_handoff)
     p_handoff.add_argument(
         "--pickup-hints-file",
         dest="pickup_hints_file",
@@ -976,8 +1008,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_resume.add_argument(
         "target",
-        help="Session note path OR worktree slug to resume",
+        nargs="?",
+        default=None,
+        help="Session note path OR worktree slug to resume "
+             "(omit to resume the current session's shelved note)",
     )
+    _add_session_selectors(p_resume)
     p_resume.set_defaults(func=cmd_resume)
 
     p_review = sub.add_parser(
