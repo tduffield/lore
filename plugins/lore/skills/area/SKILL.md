@@ -1,6 +1,6 @@
 ---
 name: area
-description: Create an area profile — overview, key files, and keywords that trigger branch-based recall. Use for /area, "profile this area", "document this area of the code", "create an area note".
+description: Create an area profile — overview, key files, and keywords (recorded for future branch-based recall, currently inactive). Use for /area, "profile this area", "document this area of the code", "create an area note".
 ---
 
 # /lore:area — Create an area profile
@@ -26,4 +26,4 @@ lore new area \
 
 Then open the written file, fill in the body sections with the user's answers, and confirm the note path.
 
-The `keywords:` field is written as an inline list (e.g. `[auth, login, oauth]`) — the SessionStart hook reads this format for branch-based recall. The `key-files:` field is likewise an inline list. Area profiles do not backlink to the session note.
+The `keywords:` field is written as an inline list (e.g. `[auth, login, oauth]`) — recorded for future branch-based recall (currently inactive; the SessionStart recall path was removed pending a smarter redesign). The `key-files:` field is likewise an inline list. Area profiles do not backlink to the session note.

@@ -22,7 +22,6 @@ import tempfile
 import time
 from pathlib import Path
 
-import config
 import frontmatter
 from vault import bucket_dir, iter_note_paths
 
@@ -202,6 +201,27 @@ def ensure_session_note(
     except Exception:
         pass
 
+    # Primary resume signal: a matching session_id. `camp` resumes a worktree
+    # via `claude -r <slug>`, which preserves the Claude session_id across
+    # restarts, so a note carrying this session_id belongs to the session being
+    # resumed — reuse it regardless of how long ago it was last touched. Without
+    # this, resuming past RESUME_WINDOW_SECONDS forks a duplicate note. A
+    # terminal note (finished/shelved) is left alone: an explicit finish means
+    # the next start earns a fresh note.
+    if session_id:
+        for note in all_session_notes_for_worktree(vault, worktree_name):
+            try:
+                fm = frontmatter.parse_frontmatter(note)
+            except Exception:
+                continue
+            if str(fm.get("session_id", "")).strip() != session_id:
+                continue
+            if str(fm.get("status", "")).strip() in _TERMINAL_STATUSES:
+                break
+            return note, False
+
+    # Fallback for a new/absent session_id: resume the newest note for this
+    # worktree if it was touched within the mtime window.
     existing = session_note_path(vault, worktree_name)
     if existing is not None:
         try:
@@ -594,13 +614,6 @@ def render_vault_index(
 
     if warning:
         lines.append(f"**Warning:** {warning}")
-        lines.append("")
-
-    if not config.RECALL_CLASSIFIER_ENABLED:
-        lines.append(
-            "**Note:** Mid-conversation area recall is not active "
-            "(classifier deferred). Branch/keyword recall fires at SessionStart only."
-        )
         lines.append("")
 
     if session_note is not None:

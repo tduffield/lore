@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# Keys whose values are compared against bare area slugs in recall.
-# For these keys only, wikilink paths are slug-reduced (prefix stripped).
+# Cross-reference keys whose wikilink values are slug-reduced (prefix
+# stripped) so `[[areas/foo]]` and `foo` compare equal for index grouping.
 _SLUG_REDUCED_KEYS = frozenset({"surfaces", "areas", "related-areas"})
 
 # Path prefixes stripped when slug-reducing overlap-key wikilink values.
