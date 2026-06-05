@@ -1,7 +1,7 @@
 ---
 type: dead-end
 tried: {{tried}}
-subsystems: {{subsystems}}
+areas: {{areas}}
 revive-condition: {{revive-condition}}
 status: active
 ---

@@ -1,6 +1,6 @@
 # Phases
 
-A second classification axis, orthogonal to `subsystems/`. Subsystem says
+A second classification axis, orthogonal to `areas/`. Area says
 **what** you're working on; phase says **where in the cycle** you are. Used
 for skill triggering, context loading, and session classification.
 
@@ -70,7 +70,7 @@ active phase.
 ### Capture
 
 Knowledge-graph writes. Fires mid-session from Build, Debug, Review, or Close.
-The capture commands: defer, decision, dead-end, radar, subsystem.
+The capture commands: defer, decision, dead-end, radar, area.
 
 ### Maintain
 
@@ -87,5 +87,5 @@ BUILD_SUB_PHASES = [Prepare, Implement, Debug, Verify]
 ## What NOT to tag by phase
 
 Tag by phase only when a bit of knowledge is genuinely relevant during one
-phase. Most subsystem gotchas, user preferences, and tool quirks are
+phase. Most area gotchas, user preferences, and tool quirks are
 phase-agnostic — leave them untagged.

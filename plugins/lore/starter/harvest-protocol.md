@@ -18,7 +18,7 @@ preserving**, append:
 - deferred: <work item>. Trigger to revisit: <condition>.
 - radar: <external thing to watch>. Cadence: weekly|monthly. Why: <reason>.
 - decision: chose <X> over <Y> because <reason>. Reversibility: easy|hard.
-- gotcha: <subsystem>: <surprising behavior>. Where it bit: <file:line or scenario>.
+- gotcha: <area>: <surprising behavior>. Where it bit: <file:line or scenario>.
 ```
 
 ## Rules
@@ -36,7 +36,7 @@ preserving**, append:
 - **deferred** — work intentionally set aside, with a clear trigger to revisit.
 - **radar** — external state to watch periodically (upstream issue, dependency release, vendor status).
 - **decision** — a non-obvious architectural or design choice.
-- **gotcha** — surprising subsystem behavior worth patching into a subsystem profile.
+- **gotcha** — surprising area behavior worth patching into an area profile.
 
 ## Pipeline
 

@@ -1,9 +1,9 @@
 ---
-name: vault-sync
-description: Commit and push the lore vault. Use for /vault-sync, "commit the vault", "sync the vault", "push the vault".
+name: sync
+description: Commit and push the lore vault. Use for /lore:sync, "commit the vault", "sync the vault", "push the vault".
 ---
 
-# /lore:vault-sync — Commit and push the vault
+# /lore:sync — Commit and push the vault
 
 Stage all vault changes, commit, and push to origin (if configured).
 

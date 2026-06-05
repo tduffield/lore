@@ -1,5 +1,5 @@
 ---
-type: subsystem
+type: area
 project: {{project}}
 name: {{name}}
 keywords: {{keywords}}
@@ -8,7 +8,7 @@ last-touched: {{date}}
 ---
 
 ## Overview
-<!-- One paragraph: what this subsystem does, where it lives. -->
+<!-- One paragraph: what this area does, where it lives. -->
 
 ## Key files
 <!-- Paths to load or grep when working here. -->
@@ -17,7 +17,7 @@ last-touched: {{date}}
 <!-- Things that have caused problems. Load-bearing details not obvious from the code. -->
 
 ## Preferences / conventions
-<!-- Conventions specific to this subsystem. -->
+<!-- Conventions specific to this area. -->
 
 ## Recent changes (rolling ~90d)
 <!-- Short log of what has moved lately. Keep trimmed. -->

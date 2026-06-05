@@ -81,7 +81,7 @@ Pull everything created or modified in the period window. Use file-date filterin
 - **Dead-ends**: `$LORE_VAULT/dead-ends/*.md` with filename date in window.
 - **Radar added**: `$LORE_VAULT/radar/*.md` with frontmatter `added` in window.
 - **Radar closed**: `$LORE_VAULT/radar/*.md` where `status` is `resolved`/`dropped` AND mtime in window.
-- **Subsystem updates**: `$LORE_VAULT/subsystems/*.md` with frontmatter `last-touched` in window.
+- **Area updates**: `$LORE_VAULT/areas/*.md` with frontmatter `last-touched` in window.
 
 Skip `active`-status session notes — they'll be picked up by the next reflection.
 
@@ -93,18 +93,18 @@ Brief:
 
 > Produce a reflection for <period> as a narrative markdown document, NOT a list. Aim for reading-time ≤5 minutes.
 >
-> Inputs (paths listed below): finalized sessions, decisions, deferred (new + closed), dead-ends, radar (added + closed), subsystem updates.
+> Inputs (paths listed below): finalized sessions, decisions, deferred (new + closed), dead-ends, radar (added + closed), area updates.
 >
 > Structure:
 >
 > ## Shape of the period
-> 2-4 sentences framing the period. What was it *about*? Biggest arcs. Use concrete details — specific decisions, subsystems — not generic phrases like "productive period."
+> 2-4 sentences framing the period. What was it *about*? Biggest arcs. Use concrete details — specific decisions, areas — not generic phrases like "productive period."
 >
 > ## Themes that recurred
 > 3-5 themes across sessions. For each: what the theme was, which sessions/decisions touched it, what changed. Bullet per theme, 2-3 sentences each. Focus on patterns that appeared in **multiple** sessions — a single one-off isn't a theme.
 >
 > ## Learnings that stuck
-> Decisions and subsystem gotchas from this period that were **referenced later** in the same period (proxy: mentioned in subsequent sessions). Those are the load-bearing ones. List 3-6 with a one-line description each.
+> Decisions and area gotchas from this period that were **referenced later** in the same period (proxy: mentioned in subsequent sessions). Those are the load-bearing ones. List 3-6 with a one-line description each.
 >
 > ## Graduated
 > What moved out of active state this period: deferred → resolved, radar → resolved, plans → completed. One sentence per graduation. If nothing graduated, say so — graduation-free periods are a signal worth naming.
@@ -113,7 +113,7 @@ Brief:
 > Items raised (deferred, radar, open questions) that were **never actioned and never re-justified** — candidates for /lore:review closure. One-liner each with a suggested closure reason.
 >
 > ## Missed signals (optional)
-> If the subagent spots something that *should* have been caught earlier — a gotcha hit twice before being captured, a decision made implicitly before being written down, a subsystem that accumulated activity without a profile — call it out. 0-3 items. Skip the section entirely if nothing qualifies; don't pad.
+> If the subagent spots something that *should* have been caught earlier — a gotcha hit twice before being captured, a decision made implicitly before being written down, an area that accumulated activity without a profile — call it out. 0-3 items. Skip the section entirely if nothing qualifies; don't pad.
 >
 > ## Next period's focus
 > 1 sentence: based on open deferred items + active radar, what's the center of gravity going into the next period?
@@ -160,7 +160,7 @@ If the user spots items in "Noise that fizzled" they want to close now, offer to
 
 ### Step 5 — Commit
 
-Use `/lore:vault-sync`:
+Use `/lore:sync`:
 
 ```
 lore sync --message "reflection: <period>"
@@ -175,7 +175,7 @@ Reflection saved to reviews/<period>-reflection.md. <N themes, M learnings, K gr
 ## Key principles
 
 - **Narrative, not list.** The reflection reads like an end-of-period note you'd write in a journal, not a dashboard. Themes are sentences, not bullet points with metrics.
-- **Concrete over generic.** Name the decision, the subsystem. "Resolved the background-job retry deferred" beats "shipped reliability work."
+- **Concrete over generic.** Name the decision, the area. "Resolved the background-job retry deferred" beats "shipped reliability work."
 - **Counts live in frontmatter, not prose.** The narrative shouldn't read like a stats page. The `counts:` frontmatter is there for aggregation; the body is for reflection.
 - **Graduation-free periods are data.** If nothing moved out of active state, say so plainly — it's a signal about either scope or follow-through.
 - **Missed signals are optional.** Don't force them. Pad-the-retro energy is worse than honest omission.

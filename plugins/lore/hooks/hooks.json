@@ -10,16 +10,6 @@
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/permission-log.py\""
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Agent|Task",

@@ -50,7 +50,7 @@ TEMPLATES_DIR = PLUGIN_ROOT / "templates"
 
 # The generic directory taxonomy every vault gets.
 TAXONOMY = [
-    "sessions", "deferred", "subsystems", "decisions", "dead-ends", "lessons",
+    "sessions", "deferred", "areas", "decisions", "dead-ends", "lessons",
     "radar", "collaboration", "specs", "plans", "designs", "inbox",
     "briefings", "reviews", "gotchas", "audits", "tools", "templates",
 ]
@@ -66,17 +66,17 @@ _NOTE_DIRS: dict[str, str] = {
     "dead-end": "dead-ends",
     "decision": "decisions",
     "radar": "radar",
-    "subsystem": "subsystems",
+    "area": "areas",
     "spec": "specs",
     "plan": "plans",
 }
 
 # Types that carry a project: field. dead-end is intentionally absent.
-_PROJECT_BEARING: frozenset[str] = frozenset({"deferred", "decision", "radar", "subsystem", "spec", "plan"})
+_PROJECT_BEARING: frozenset[str] = frozenset({"deferred", "decision", "radar", "area", "spec", "plan"})
 
 # Note types stored in date-bucketed YYYY-MM subdirs (the date-bucketed archive
 # layout). The date-based living folders (deferred/dead-ends/decisions/radar)
-# join the archive types; only singleton subsystem profiles (name-keyed) stay
+# join the archive types; only singleton area profiles (name-keyed) stay
 # flat at the folder root.
 _BUCKETED_TYPES: frozenset[str] = frozenset(
     {"spec", "plan", "deferred", "decision", "radar", "dead-end"}
@@ -88,7 +88,7 @@ _BACKLINK_SECTIONS: dict[str, str | None] = {
     "dead-end": "Learned",
     "decision": "Decided",
     "radar": None,
-    "subsystem": None,
+    "area": None,
     "spec": None,
     "plan": None,
 }
@@ -196,27 +196,27 @@ def cmd_new(args: argparse.Namespace) -> int:
         subs["status"] = "scheduled" if revisit_after else "open"
 
     elif note_type == "dead-end":
-        subs["subsystems"] = _csv_to_inline_list(getattr(args, "subsystems", None))
+        subs["areas"] = _csv_to_inline_list(getattr(args, "areas", None))
         subs["tried"] = getattr(args, "tried", None) or today
         subs["revive-condition"] = getattr(args, "revive_condition", None) or ""
 
     elif note_type == "decision":
-        subs["subsystems"] = _csv_to_inline_list(getattr(args, "subsystems", None))
+        subs["areas"] = _csv_to_inline_list(getattr(args, "areas", None))
 
     elif note_type == "radar":
         subs["source"] = getattr(args, "source", None) or ""
         subs["target"] = getattr(args, "target", None) or ""
         subs["check"] = getattr(args, "check", None) or ""
 
-    elif note_type == "subsystem":
+    elif note_type == "area":
         subs["keywords"] = _csv_to_inline_list(getattr(args, "keywords", None))
         subs["key-files"] = _csv_to_inline_list(getattr(args, "key_files", None))
 
     elif note_type == "spec":
-        subs["subsystems"] = _csv_to_inline_list(getattr(args, "subsystems", None))
+        subs["areas"] = _csv_to_inline_list(getattr(args, "areas", None))
 
     elif note_type == "plan":
-        subs["related-subsystems"] = _csv_to_inline_list(getattr(args, "related_subsystems", None))
+        subs["related-areas"] = _csv_to_inline_list(getattr(args, "related_areas", None))
         subs["related-spec"] = getattr(args, "related_spec", None) or ""
         subs["slug"] = _kebab(args.title)
 
@@ -240,20 +240,20 @@ def cmd_new(args: argparse.Namespace) -> int:
             )
             return 1
 
-    # Write the note — subsystem profiles are singletons identified by their
+    # Write the note — area profiles are singletons identified by their
     # bare kebab name (no date prefix). All other types get YYYY-MM-DD-<slug>
     # naming with collision handling.
     note_dir = vault / _NOTE_DIRS[note_type]
     if note_type in _BUCKETED_TYPES:
         note_dir = vault_mod.bucket_dir(note_dir, today)
     note_dir.mkdir(parents=True, exist_ok=True)
-    if note_type == "subsystem":
+    if note_type == "area":
         stem = _kebab(args.title)
         note_path = note_dir / f"{stem}.md"
         if note_path.exists():
             print(
-                f"error: subsystem profile '{stem}' already exists at {note_path} — "
-                "edit it directly (lore new subsystem creates a new profile).",
+                f"error: area profile '{stem}' already exists at {note_path} — "
+                "edit it directly (lore new area creates a new profile).",
                 file=sys.stderr,
             )
             return 1
@@ -681,7 +681,7 @@ def _report_harvest(result: harvest_mod.ExpansionResult) -> None:
     for warning in result.warnings:
         print(warning, file=sys.stderr)
     if result.gotchas:
-        print("Surfaced gotchas (not expanded — patch via /lore:subsystem):")
+        print("Surfaced gotchas (not expanded — patch via /lore:area):")
         for g in result.gotchas:
             print(f"  - gotcha: {g.body}")
 
@@ -995,7 +995,7 @@ def cmd_review(args: argparse.Namespace) -> int:
     """Generate a vault migration-discipline report.
 
     Outputs a structured markdown report covering: git activity since the
-    last review, action taxonomy drift, graduation candidates, stale subsystem
+    last review, action taxonomy drift, graduation candidates, stale area
     profiles, open deferred items, dead-ends, open radar items, and active
     lessons. Read-only — the report never mutates the vault.
     """
@@ -1025,7 +1025,7 @@ def _count(directory: Path, predicate, recursive: bool = False) -> int:
 
 def cmd_stats(args: argparse.Namespace) -> int:
     vault = Path(vault_mod.resolve_vault())
-    subsystems = _count(vault / "subsystems", lambda fm: True)
+    areas = _count(vault / "areas", lambda fm: True)
     open_deferred = _count(
         vault / "deferred",
         lambda fm: fm.get("status") in ("open", "resurfaced"),
@@ -1042,7 +1042,7 @@ def cmd_stats(args: argparse.Namespace) -> int:
     sessions = _count(vault / "sessions", lambda fm: fm.get("type") == "session", recursive=True)
 
     print(f"vault: {vault}")
-    print(f"subsystems:     {subsystems}")
+    print(f"areas:          {areas}")
     print(f"open deferred:  {open_deferred}")
     print(f"active lessons: {active_lessons}")
     print(f"dead-ends:      {dead_ends}")
@@ -1389,22 +1389,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_new.add_argument("--vault", default=None, help="Vault path (overrides $LORE_VAULT)")
     p_new.add_argument("--project", default=None, help="Project name to stamp in frontmatter")
     # deferred
-    p_new.add_argument("--surfaces", default=None, help="CSV subsystem names this item surfaces on (deferred)")
+    p_new.add_argument("--surfaces", default=None, help="CSV area names this item surfaces on (deferred)")
     p_new.add_argument("--next-check", dest="next_check", default=None, help="When to next check (deferred)")
     p_new.add_argument("--revisit-after", dest="revisit_after", default=None, help="Date-bound revisit trigger (deferred)")
     # dead-end
-    p_new.add_argument("--subsystems", default=None, help="CSV subsystem names (dead-end, decision)")
+    p_new.add_argument("--areas", default=None, help="CSV area names (dead-end, decision)")
     p_new.add_argument("--tried", default=None, help="Date the approach was tried (dead-end; defaults to today)")
     p_new.add_argument("--revive-condition", dest="revive_condition", default=None, help="Condition to retry (dead-end)")
     # radar
     p_new.add_argument("--source", default=None, help="Where updates appear (radar)")
     p_new.add_argument("--target", default=None, help="Version or state being waited for (radar)")
     p_new.add_argument("--check", default=None, help="Check cadence (radar)")
-    # subsystem
-    p_new.add_argument("--keywords", default=None, help="CSV keywords for branch-based recall (subsystem)")
-    p_new.add_argument("--key-files", dest="key_files", default=None, help="CSV key file paths (subsystem)")
+    # area
+    p_new.add_argument("--keywords", default=None, help="CSV keywords for branch-based recall (area)")
+    p_new.add_argument("--key-files", dest="key_files", default=None, help="CSV key file paths (area)")
     # plan
-    p_new.add_argument("--related-subsystems", dest="related_subsystems", default=None, help="CSV subsystem names (plan)")
+    p_new.add_argument("--related-areas", dest="related_areas", default=None, help="CSV area names (plan)")
     p_new.add_argument("--related-spec", dest="related_spec", default=None, help="Related spec path or wikilink (plan)")
     p_new.set_defaults(func=cmd_new)
 

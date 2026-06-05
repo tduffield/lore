@@ -6,7 +6,7 @@ in-scope types (deferred / decision / dead-end / radar / lesson) into a full
 templated note in the matching vault directory.
 
 Out of scope:
-- `gotcha` entries are a subsystem patch, not a standalone note. They are
+- `gotcha` entries are an area patch, not a standalone note. They are
   surfaced (returned for the finish report) and LEFT in `harvest-pending.md`.
 - Malformed / unmarked lines are retained and warned, never silently consumed.
 
@@ -195,7 +195,7 @@ def render_note(entry: Entry, templates_dir: Path, today: str, project: str) -> 
         rendered = _append_section(rendered, "## When to revisit", trigger or "")
 
     elif kind == "decision":
-        subs = {"project": project, "date": today, "subsystems": "[]"}
+        subs = {"project": project, "date": today, "areas": "[]"}
         rendered = _render(template, subs)
         rendered = _append_section(rendered, "## Decision", lead + ".")
         # "chose X over Y because Z" — the reason is part of the lead; capture
@@ -206,7 +206,7 @@ def render_note(entry: Entry, templates_dir: Path, today: str, project: str) -> 
 
     elif kind == "dead-end":
         subs = {
-            "tried": today, "subsystems": "[]",
+            "tried": today, "areas": "[]",
             "revive-condition": fields.get("revive if") or fields.get("revive") or "",
         }
         rendered = _render(template, subs)
@@ -233,7 +233,7 @@ def render_note(entry: Entry, templates_dir: Path, today: str, project: str) -> 
     elif kind == "lesson":
         subs = {
             "project": project, "date": today,
-            "subsystems": "[]", "severity": fields.get("confidence") or "",
+            "areas": "[]", "severity": fields.get("confidence") or "",
         }
         rendered = _render(template, subs)
         rendered = _append_section(rendered, "## What we did wrong", lead + ".")

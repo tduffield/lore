@@ -2,20 +2,20 @@
 
 This is a **lore vault** — a plain-markdown-in-git knowledge layer for your
 work. It captures the durable, non-obvious things worth remembering across
-sessions: subsystem mental models, decisions, dead-ends, deferred work,
+sessions: area mental models, decisions, dead-ends, deferred work,
 lessons, and a running session log.
 
 The [lore](https://github.com) Claude Code plugin reads this vault at session
 start (recalling what's relevant to the branch you're on) and writes to it
 through capture commands (`/lore:defer`, `/lore:decision`, `/lore:dead-end`,
-`/lore:radar`, `/lore:subsystem`) and the `lore` CLI.
+`/lore:radar`, `/lore:area`) and the `lore` CLI.
 
 ## Layout
 
 | Directory | What lives here |
 |---|---|
 | `sessions/` | One note per working session; the running log. |
-| `subsystems/` | Mental models of the parts of your system. |
+| `areas/` | Mental models of the parts of your system. |
 | `decisions/` | Lightweight ADRs — why we chose X over Y. |
 | `dead-ends/` | Approaches that didn't work, with a revive condition. |
 | `lessons/` | Mistakes plus a concrete prevention check. |

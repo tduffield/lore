@@ -12,7 +12,7 @@ Gather the following from the user conversationally, asking only for what is mis
 3. **Decision** — what was chosen (one or two sentences)
 4. **Rationale** — the load-bearing reason; if this disappears the decision may no longer hold
 5. **Consequences** — what this constrains or enables downstream
-6. **Subsystems** — comma-separated subsystem names this decision touches (optional)
+6. **Areas** — comma-separated area names this decision touches (optional)
 7. **Project** — project name (infer from `git remote get-url origin` if not stated)
 
 Once you have title and project at minimum, run:
@@ -21,7 +21,7 @@ Once you have title and project at minimum, run:
 lore new decision \
   --title "<title>" \
   --project "<project>" \
-  [--subsystems "<sub1>,<sub2>"] \
+  [--areas "<area1>,<area2>"] \
   [--vault "$LORE_VAULT"]
 ```
 

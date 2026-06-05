@@ -2,7 +2,7 @@
 type: decision
 project: {{project}}
 date: {{date}}
-subsystems: {{subsystems}}
+areas: {{areas}}
 ---
 
 ## Context

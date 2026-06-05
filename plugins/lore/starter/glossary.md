@@ -1,12 +1,12 @@
 # Glossary
 
 Project-specific vocabulary. Grows as new terms are encountered. Each entry
-is one sentence; link to a subsystem profile or decision note for depth.
+is one sentence; link to an area profile or decision note for depth.
 
 ## Terms
 
 <!-- Seed entries; expand as needed. Example shape:
-- **term** — one-sentence definition. See [[subsystems/...]] for depth.
+- **term** — one-sentence definition. See [[areas/...]] for depth.
 -->
 
 ## Status vocabulary

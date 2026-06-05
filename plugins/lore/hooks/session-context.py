@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """SessionStart hook: ensure a session note exists for this worktree and emit
-the baseline vault index, optionally followed by the subsystem recall block.
+the baseline vault index.
 
 Resolves the vault via `resolve_vault()` ($LORE_VAULT, default ~/lore). Creates
 or resumes a `YYYY-MM-DD-HHMM-<worktree>.md` session note (worktree = CWD
 basename), then emits a baseline index (vault stats, the session-note pointer,
-and the capture-command reminder). When the current git branch matches a
-subsystem's declared keywords, the subsystem profile and related notes are
-appended to the context.
+and the capture-command reminder).
+
+Branch-keyword area recall was removed (2026-06-05): every camp branch is
+`worktree-<slug>`, so the `worktree` keyword matched on every session and the
+recall block became noise. To be reintroduced in a smarter form later; see the
+deferred note in the vault.
 
 Never raises — on any error emits `{}` so it can never block session start.
 """
@@ -23,7 +26,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import sessions  # noqa: E402
-import recall  # noqa: E402
 import link_server  # noqa: E402
 from vault import resolve_project, resolve_vault  # noqa: E402
 
@@ -109,16 +111,6 @@ def build_context(session_id: str) -> str | None:
         session_note_display=session_note_display,
     )
 
-    subsystem_block: str | None = None
-    try:
-        matched = recall.infer_subsystems(vault, branch)
-        if matched:
-            subsystem_block = recall.render_subsystem_block(vault, matched, project=project)
-    except Exception:
-        pass
-
-    if subsystem_block:
-        return index + subsystem_block
     return index
 
 
