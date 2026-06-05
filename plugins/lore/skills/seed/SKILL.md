@@ -1,12 +1,12 @@
 ---
-name: intake
+name: seed
 description: >
   Pull a raw capture from `$LORE_VAULT/inbox/` and hand it off to `/lore:brainstorm` as the
   seed material so it gets shaped into a frozen spec instead of rotting in inbox/.
-  Use for /intake <doc>, "intake the X note", "run intake on <doc>", "brainstorm from the inbox".
+  Use for /lore:seed <doc>, "seed from the X note", "run seed on <doc>", "brainstorm from the inbox".
 ---
 
-# Intake
+# /lore:seed
 
 Take a rough capture from the inbox and feed it into the brainstorming flow so it gets shaped
 into a frozen spec instead of rotting in `inbox/`. Inbox is staging, not storage.
@@ -45,7 +45,7 @@ brainstorming is free to reframe, challenge, or split it.
 After brainstorm produces a `status: ready` spec:
 
 **no issue tracker configured — ticket linkage skipped.** The spec written to
-`$LORE_VAULT/specs/` is the output of intake; issue-tracker linkage is optional metadata.
+`$LORE_VAULT/specs/` is the output of seed; issue-tracker linkage is optional metadata.
 
 If your environment has an issue-tracker integration, configure it in a local skill extension
 and hook it here. See `docs/DEGRADATION.md` for the re-add path.
@@ -63,11 +63,11 @@ If brainstorming is paused or deferred rather than finalized, leave the inbox fi
 
 ## Key Principles
 
-- **Inbox is staging, not storage.** Every intake run should either promote the doc to a spec
+- **Inbox is staging, not storage.** Every seed run should either promote the doc to a spec
   or leave it with a clear next action.
 - **Don't skip brainstorming.** Even if the inbox doc looks plan-ready, run it through
   brainstorming's Poke-at-Edges — inbox drops are written fast and almost always have hidden
   assumptions.
 - **One doc per run.** Process multiple docs sequentially, never merged.
-- **The spec is the output of intake; issue-tracker linkage is optional metadata.** Never let
+- **The spec is the output of seed; issue-tracker linkage is optional metadata.** Never let
   tracker-integration failures block or delay the spec.

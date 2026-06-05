@@ -160,7 +160,7 @@ If the user spots items in "Noise that fizzled" they want to close now, offer to
 
 ### Step 5 — Commit
 
-Use `/lore:vault-sync`:
+Use `/lore:sync`:
 
 ```
 lore sync --message "reflection: <period>"

@@ -113,7 +113,7 @@ actions-taken:
 
 ### Step 6 — Commit
 
-Use `/lore:vault-sync` to commit the review note and all mutations:
+Use `/lore:sync` to commit the review note and all mutations:
 
 ```
 lore-review: <date> — N actions taken

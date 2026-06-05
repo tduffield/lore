@@ -134,7 +134,7 @@ For each moved item, if its `## On change` block names a concrete action (reopen
 
 ### Step 6 — Commit
 
-Use `/lore:vault-sync`:
+Use `/lore:sync`:
 
 ```
 lore sync --message "check-radar: <date>"
