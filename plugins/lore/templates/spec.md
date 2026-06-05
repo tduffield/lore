@@ -2,7 +2,7 @@
 type: spec
 project: {{project}}
 status: draft
-subsystems: {{subsystems}}
+areas: {{areas}}
 created: {{date}}
 updated: {{date}}
 ---

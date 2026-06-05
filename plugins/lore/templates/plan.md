@@ -4,7 +4,7 @@ project: {{project}}
 status: draft
 slug: {{slug}}
 created: {{date}}
-related-subsystems: {{related-subsystems}}
+related-areas: {{related-areas}}
 related-spec: {{related-spec}}
 ---
 

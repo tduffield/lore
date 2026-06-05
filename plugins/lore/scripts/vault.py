@@ -41,7 +41,7 @@ def iter_note_paths(directory: Path, recursive: bool = False) -> Iterator[Path]:
 
     The date-bucketed folders (sessions/plans/specs/designs and the living
     folders deferred/dead-ends/lessons/decisions/radar) pass ``recursive=True``;
-    the name-keyed folders (subsystems/tools/etc.) stay flat.
+    the name-keyed folders (areas/tools/etc.) stay flat.
     """
     directory = Path(directory)
     if not directory.is_dir():

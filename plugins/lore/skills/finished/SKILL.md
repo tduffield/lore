@@ -14,7 +14,7 @@ note from in-context synthesis, then calls `lore finish`, which:
    (`deferred` / `decision` / `dead-end` / `radar` / `lesson`) into a full
    templated note in the matching vault directory.
 3. Surfaces `gotcha` entries in the finish report for manual
-   `/lore:subsystem` patching — they are NOT auto-expanded and remain in
+   `/lore:area` patching — they are NOT auto-expanded and remain in
    `harvest-pending.md`.
 4. Retains malformed or unmarked lines in `harvest-pending.md` with a
    warning rather than silently consuming them.
@@ -83,7 +83,7 @@ notes, and commits everything in one shot. Relay any notices printed (push
 failure, no remote, surfaced gotchas).
 
 **Gotchas in the report:** if `lore finish` prints surfaced `gotcha` entries,
-tell the user — they need a manual `/lore:subsystem` patch to record them.
+tell the user — they need a manual `/lore:area` patch to record them.
 
 ### Step 5 — Report to the user
 

@@ -10,7 +10,7 @@ Sections reported:
 - Activity since last review (git log with file-level changes)
 - Action taxonomy drift (near-duplicate action names)
 - Graduation candidates (collaboration notes aging past 30 days)
-- Stale subsystem profiles (last-touched older than 60 days)
+- Stale area profiles (last-touched older than 60 days)
 - Open deferred items (for trigger-condition review)
 - Dead-ends (for revive-condition review)
 - Open radar items (for migration)
@@ -28,7 +28,7 @@ import frontmatter as fm_mod
 from vault import iter_note_paths
 
 GRADUATION_AGE_DAYS = 30
-STALE_SUBSYSTEM_DAYS = 60
+STALE_AREA_DAYS = 60
 
 
 def _git(vault: Path, *args: str) -> tuple[int, str, str]:
@@ -216,11 +216,11 @@ def section_graduation_candidates(vault: Path) -> list[str]:
     return lines
 
 
-def section_stale_subsystems(vault: Path) -> list[str]:
-    lines = ["## Stale subsystem profiles", ""]
-    dir_path = vault / "subsystems"
+def section_stale_areas(vault: Path) -> list[str]:
+    lines = ["## Stale area profiles", ""]
+    dir_path = vault / "areas"
     if not dir_path.is_dir():
-        lines.append("_No subsystems dir._")
+        lines.append("_No areas dir._")
         lines.append("")
         return lines
 
@@ -228,7 +228,7 @@ def section_stale_subsystems(vault: Path) -> list[str]:
     stale: list[tuple[Path, int]] = []
     for p in sorted(dir_path.glob("*.md")):
         note_fm = fm_mod.parse_frontmatter(p)
-        if note_fm.get("type") != "subsystem":
+        if note_fm.get("type") != "area":
             continue
         last_touched = note_fm.get("last-touched")
         if not isinstance(last_touched, str):
@@ -238,16 +238,16 @@ def section_stale_subsystems(vault: Path) -> list[str]:
         except Exception:
             continue
         age = (today - lt_date).days
-        if age >= STALE_SUBSYSTEM_DAYS:
+        if age >= STALE_AREA_DAYS:
             stale.append((p, age))
 
     if not stale:
-        lines.append(f"_No subsystem profiles older than {STALE_SUBSYSTEM_DAYS} days._")
+        lines.append(f"_No area profiles older than {STALE_AREA_DAYS} days._")
         lines.append("")
         return lines
 
     lines.append(
-        f"Profiles with `last-touched` older than {STALE_SUBSYSTEM_DAYS} days — "
+        f"Profiles with `last-touched` older than {STALE_AREA_DAYS} days — "
         "either they're inactive and fine, or they need a refresh pass:"
     )
     lines.append("")
@@ -365,8 +365,8 @@ def section_active_lessons(vault: Path) -> list[str]:
     lines.append("Review each — is the prevention check still meaningful, or has it been superseded by tooling?")
     lines.append("")
     for p, note_fm in hits:
-        subsystems = note_fm.get("subsystems") or []
-        lines.append(f"- [[{p.relative_to(vault)}]] — subsystems: {subsystems}")
+        areas = note_fm.get("areas") or []
+        lines.append(f"- [[{p.relative_to(vault)}]] — areas: {areas}")
     lines.append("")
     return lines
 
@@ -385,7 +385,7 @@ def build_report(vault: Path, since: str) -> str:
     out.extend(section_activity(vault, since))
     out.extend(section_drift(vault))
     out.extend(section_graduation_candidates(vault))
-    out.extend(section_stale_subsystems(vault))
+    out.extend(section_stale_areas(vault))
     out.extend(section_open_deferred(vault))
     out.extend(section_dead_ends(vault))
     out.extend(section_open_radar(vault))

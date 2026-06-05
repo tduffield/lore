@@ -44,7 +44,7 @@ LORE_COMMANDS = (
     "`/lore:dead-end`",
     "`/lore:decision`",
     "`/lore:radar`",
-    "`/lore:subsystem`",
+    "`/lore:area`",
 )
 
 
@@ -174,7 +174,7 @@ def _session_body() -> str:
         "## Deferred\n"
         "<!-- Links to deferred/ notes created in this session. -->\n\n"
         "## Learned\n"
-        "<!-- Gotchas, subsystem corrections, links to dead-ends/ notes. -->\n\n"
+        "<!-- Gotchas, area corrections, links to dead-ends/ notes. -->\n\n"
         "## Open questions\n"
         "<!-- Unresolved threads. -->\n"
     )
@@ -226,7 +226,7 @@ def ensure_session_note(
         f"branch: {branch}\n"
         f"started: {now_iso}\n"
         "ended:\n"
-        "subsystems: []\n"
+        "areas: []\n"
         "phase: Orient\n"
         f"{sid_line}"
         "status: active\n"
@@ -543,7 +543,7 @@ def get_vault_stats(vault: Path) -> dict:
     """Lightweight counts for the SessionStart baseline index. Never raises."""
     vault = Path(vault)
     stats = {
-        "subsystems": 0,
+        "areas": 0,
         "open_deferred": 0,
         "dead_ends": 0,
         "active_lessons": 0,
@@ -551,7 +551,7 @@ def get_vault_stats(vault: Path) -> dict:
     }
     if not vault.exists():
         return stats
-    stats["subsystems"] = _count(vault / "subsystems", lambda fm: True)
+    stats["areas"] = _count(vault / "areas", lambda fm: True)
     stats["open_deferred"] = _count(
         vault / "deferred",
         lambda fm: fm.get("type") == "deferred"
@@ -598,7 +598,7 @@ def render_vault_index(
 
     if not config.RECALL_CLASSIFIER_ENABLED:
         lines.append(
-            "**Note:** Mid-conversation subsystem recall is not active "
+            "**Note:** Mid-conversation area recall is not active "
             "(classifier deferred). Branch/keyword recall fires at SessionStart only."
         )
         lines.append("")
@@ -619,7 +619,7 @@ def render_vault_index(
         lines.append("")
 
     lines.append(
-        f"**Vault state:** {stats['subsystems']} subsystem profiles · "
+        f"**Vault state:** {stats['areas']} area profiles · "
         f"{stats['open_deferred']} open deferred · "
         f"{stats['dead_ends']} dead-ends · "
         f"{stats['active_lessons']} active lessons · "

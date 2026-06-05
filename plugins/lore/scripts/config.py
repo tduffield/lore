@@ -6,7 +6,7 @@ corresponding behavior across the plugin.
 """
 
 # Mid-conversation recall via UserPromptSubmit classification.
-# When False, lore's SessionStart banner announces that subsystem recall
+# When False, lore's SessionStart banner announces that area recall
 # is available at session start only, not during conversation turns.
 # Flip this to True when the UserPromptSubmit classifier is ported.
 RECALL_CLASSIFIER_ENABLED: bool = False

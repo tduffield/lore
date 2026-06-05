@@ -12,12 +12,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# Keys whose values are compared against bare subsystem slugs in recall.
+# Keys whose values are compared against bare area slugs in recall.
 # For these keys only, wikilink paths are slug-reduced (prefix stripped).
-_SLUG_REDUCED_KEYS = frozenset({"surfaces", "subsystems", "related-subsystems"})
+_SLUG_REDUCED_KEYS = frozenset({"surfaces", "areas", "related-areas"})
 
 # Path prefixes stripped when slug-reducing overlap-key wikilink values.
-_SLUG_PREFIXES = ("subsystems/", "tools/", "plans/")
+_SLUG_PREFIXES = ("areas/", "tools/", "plans/")
 
 
 def _unwrap_wikilink(value: str) -> str:
@@ -53,8 +53,8 @@ def _parse_fm_text(text: str) -> dict:
     - Block list:  key:\n  - item\n  - item
 
     For every list item (inline or block): strips surrounding quotes and
-    unwraps [[wikilinks]]. For overlap keys (surfaces, subsystems,
-    related-subsystems), the path prefix (subsystems/, tools/, plans/) is
+    unwraps [[wikilinks]]. For overlap keys (surfaces, areas,
+    related-areas), the path prefix (areas/, tools/, plans/) is
     stripped to a bare slug. For all other keys, the full wikilink target
     is kept verbatim.
     """

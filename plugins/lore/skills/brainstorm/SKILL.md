@@ -41,15 +41,15 @@ returns a summary.
 ### 1. Frame
 
 - Restate the idea in one paragraph using your own words. Confirm with the user.
-- Identify touched subsystems (cross-reference with subsystem profiles in `$LORE_VAULT/subsystems/`
-  if your vault has subsystem profiles).
+- Identify touched areas (cross-reference with area profiles in `$LORE_VAULT/areas/`
+  if your vault has area profiles).
 - Pull related prior art **for reference only**:
   - Existing specs in `$LORE_VAULT/specs/` on overlapping topics
   - Relevant decisions in `$LORE_VAULT/decisions/`
   - Prior dead-ends in `$LORE_VAULT/dead-ends/`
-  - Active lessons in `$LORE_VAULT/lessons/` for the touched subsystems — each carries a
+  - Active lessons in `$LORE_VAULT/lessons/` for the touched areas — each carries a
     prevention check that should shape acceptance criteria or non-goals
-- **For cross-cutting topics** spanning multiple subsystems, if a knowledge-synthesis subagent is
+- **For cross-cutting topics** spanning multiple areas, if a knowledge-synthesis subagent is
   available (such as `lore:lore-librarian`), dispatch it with a synthesis question ("what do we
   know about X, and what's already been decided / tried / deferred?") rather than reading each
   note yourself. If no such subagent is configured, read the relevant notes directly.

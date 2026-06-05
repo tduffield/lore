@@ -10,9 +10,9 @@ URLs — custom URI schemes like `obsidian://` render as plain, non-clickable te
 only clickable thing a tool can emit is a bare `http://` URL. The link server turns such
 a URL into an Obsidian open:
 
-    click  http://localhost:7777/subsystems/workflow-brain-context
+    click  http://localhost:7777/areas/workflow-brain-context
       -> GET to this server
-      -> macOS `open obsidian://open?path=<vault>/subsystems/workflow-brain-context.md`
+      -> macOS `open obsidian://open?path=<vault>/areas/workflow-brain-context.md`
       -> Obsidian focuses the note
 
 It is **macOS + Obsidian only**, and entirely **opt-in** — nothing runs until you install

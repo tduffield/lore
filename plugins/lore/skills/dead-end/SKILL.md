@@ -12,7 +12,7 @@ Gather the following from the user conversationally, asking only for what is mis
 3. **What was tried** — concrete approach with enough detail to recognize it next time
 4. **Why it failed** — root cause (not just symptoms)
 5. **Revive condition** — specific condition that would make retrying worthwhile ("Never" is valid)
-6. **Subsystems** — comma-separated subsystem names this dead-end is associated with (optional)
+6. **Areas** — comma-separated area names this dead-end is associated with (optional)
 7. **Tried date** — when this was attempted (`YYYY-MM-DD`; defaults to today)
 
 Dead-ends are universal (not project-specific). Once you have the title at minimum, run:
@@ -20,7 +20,7 @@ Dead-ends are universal (not project-specific). Once you have the title at minim
 ```bash
 lore new dead-end \
   --title "<title>" \
-  [--subsystems "<sub1>,<sub2>"] \
+  [--areas "<area1>,<area2>"] \
   [--revive-condition "<condition>"] \
   [--tried "<YYYY-MM-DD>"] \
   [--vault "$LORE_VAULT"]

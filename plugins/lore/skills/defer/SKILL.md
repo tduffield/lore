@@ -10,7 +10,7 @@ Gather the following from the user conversationally, asking only for what is mis
 1. **Title** — short noun phrase describing what is being deferred (required)
 2. **Why deferred** — one sentence: why now is not the right time
 3. **When to revisit** — specific trigger condition or date (`YYYY-MM-DD`)
-4. **Surfaces** — comma-separated subsystem names this item touches (optional; leave empty if unclear)
+4. **Surfaces** — comma-separated area names this item touches (optional; leave empty if unclear)
 5. **Next check** — date or trigger for the next review (optional)
 6. **Revisit after** — `YYYY-MM-DD` for a time-bound revisit; sets `status: scheduled` (optional)
 7. **Project** — project name (infer from `git remote get-url origin` if not stated)

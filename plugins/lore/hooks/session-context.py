@@ -7,7 +7,7 @@ or resumes a `YYYY-MM-DD-HHMM-<worktree>.md` session note (worktree = CWD
 basename), then emits a baseline index (vault stats, the session-note pointer,
 and the capture-command reminder).
 
-Branch-keyword subsystem recall was removed (2026-06-05): every camp branch is
+Branch-keyword area recall was removed (2026-06-05): every camp branch is
 `worktree-<slug>`, so the `worktree` keyword matched on every session and the
 recall block became noise. To be reintroduced in a smarter form later; see the
 deferred note in the vault.

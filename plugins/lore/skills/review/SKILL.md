@@ -1,6 +1,6 @@
 ---
 name: review
-description: Weekly migration ritual for the lore vault — force each open deferred, radar, dead-end, and active lesson to be re-justified in fresh words or closed. Also catches taxonomy drift, graduation candidates, and stale subsystem profiles. Use for /lore:review, "run vault review", "weekly review", "migration pass".
+description: Weekly migration ritual for the lore vault — force each open deferred, radar, dead-end, and active lesson to be re-justified in fresh words or closed. Also catches taxonomy drift, graduation candidates, and stale area profiles. Use for /lore:review, "run vault review", "weekly review", "migration pass".
 ---
 
 # /lore:review — Weekly migration pass
@@ -26,7 +26,7 @@ The friction is the feature. If you can't restate *why this still matters* in on
 
 ### Step 1 — Announce
 
-"Running weekly migration pass. Every open deferred, radar, dead-end, and active lesson gets re-justified in fresh words or closed. I'll also catch taxonomy drift, graduation candidates, and stale subsystem profiles."
+"Running weekly migration pass. Every open deferred, radar, dead-end, and active lesson gets re-justified in fresh words or closed. I'll also catch taxonomy drift, graduation candidates, and stale area profiles."
 
 ### Step 2 — Generate the report
 
@@ -43,7 +43,7 @@ The report contains:
 1. **Activity since last review** — git log + files touched, grouped by top-level dir
 2. **Action taxonomy drift** — near-duplicate action names (token overlap ≥ 50%)
 3. **Graduation candidates** — active collaboration notes older than 30 days
-4. **Stale subsystem profiles** — profiles with `last-touched` older than 60 days
+4. **Stale area profiles** — profiles with `last-touched` older than 60 days
 5. **Open deferred items** — every one, for migration
 6. **Dead-ends** — for revive-condition review
 7. **Open radar items** — every one, for migration
@@ -59,7 +59,7 @@ Present each section with your take. The migration sections (5–8) are load-bea
 
 **Graduation candidates** (section 3): for each aged collaboration note, assess whether the pattern has stabilized enough to become a memory feedback rule.
 
-**Stale subsystem profiles** (section 4): for each, check recent git activity in the relevant code. If we've been working there, propose updates. If not, it's dormant — fine.
+**Stale area profiles** (section 4): for each, check recent git activity in the relevant code. If we've been working there, propose updates. If not, it's dormant — fine.
 
 **Open deferred items** (section 5) — **migration**: for each open item, restate it:
 
@@ -75,7 +75,7 @@ If the user can't readily answer — press: "If you can't articulate why in one 
 
 **Active lessons** (section 8): for each, restate "We did X wrong. Found out by Y. Prevention check: Z." Two questions:
 1. Is the prevention check still meaningful (or superseded by tooling)?
-2. Are the `subsystems:` cross-links current?
+2. Are the `areas:` cross-links current?
 
 ### Step 4 — Execute approved changes
 

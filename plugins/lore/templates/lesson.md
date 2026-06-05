@@ -2,7 +2,7 @@
 type: lesson
 project: {{project}}
 date: {{date}}
-subsystems: {{subsystems}}
+areas: {{areas}}
 severity: {{severity}}
 status: active
 ---
