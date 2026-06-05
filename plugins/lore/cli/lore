@@ -4,6 +4,7 @@
 Subcommands:
   lore init <path>          Scaffold a new vault (taxonomy + starter docs).
   lore new <type>           Render a template and write a new vault note.
+  lore seed <name>          Scaffold an inbox capture + open it in Obsidian.
   lore patch <file> <sec>   Append text under a section (--text or stdin).
   lore set-status <f> <v>   Validate + set a note's frontmatter status.
   lore stats                Print counts for the resolved vault.
@@ -31,6 +32,7 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
+from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -280,6 +282,75 @@ def cmd_new(args: argparse.Namespace) -> int:
             backlink = f"- [[{rel_link}]] — {title_display}"
             frontmatter.patch_section(session_note, section, backlink)
 
+    return 0
+
+
+# ---- seed -------------------------------------------------------------------
+
+def _obsidian_open_uri(abs_path: Path) -> str:
+    """Return an obsidian://open?path=<abs> URI for an absolute note path.
+
+    Mirrors lore-link-server's uri_for(): percent-encodes the path with
+    forward-slashes preserved (safe='/') so the URI is directly openable by
+    macOS `open`.
+    """
+    return "obsidian://open?path=" + quote(str(abs_path), safe="/")
+
+
+def _open_in_obsidian(abs_path: Path) -> tuple[bool, str]:
+    """Hand an obsidian:// URI to the opener. Returns (launched, detail).
+
+    The opener is $LORE_OPEN_BIN (for tests) else macOS `open`. The default
+    `open` is gated to darwin; an explicit override is trusted on any platform
+    so the launch path stays testable. When the opener is unavailable the note
+    is still on disk — we never fail the command over a missed launch.
+    """
+    opener = os.environ.get("LORE_OPEN_BIN", "").strip() or "open"
+    uri = _obsidian_open_uri(abs_path)
+
+    if opener == "open" and sys.platform != "darwin":
+        return False, f"not darwin ({sys.platform}); open it manually: {abs_path}"
+    if shutil.which(opener) is None and not Path(opener).is_file():
+        return False, f"opener {opener!r} not found; open it manually: {abs_path}"
+
+    subprocess.run([opener, uri], shell=False, check=False)
+    return True, uri
+
+
+def cmd_seed(args: argparse.Namespace) -> int:
+    """Scaffold an inbox capture named <slug> and open it in Obsidian.
+
+    Idempotent: the note is keyed by name alone (no date prefix), so if a note
+    for this name already exists it is opened as-is, never overwritten. The
+    note carries minimal frontmatter (type: inbox, date, status: new) and an H1
+    of the human-readable name.
+    """
+    vault = Path(args.vault).expanduser().resolve() if args.vault else Path(vault_mod.resolve_vault())
+    today = _today()
+
+    note_dir = vault / "inbox"
+    note_dir.mkdir(parents=True, exist_ok=True)
+    note_path = note_dir / f"{_kebab(args.name)}.md"
+
+    if note_path.exists():
+        print(f"Exists: {note_path}")
+    else:
+        template_path = TEMPLATES_DIR / "inbox.md"
+        if not template_path.is_file():
+            print(f"error: template not found: {template_path}", file=sys.stderr)
+            return 1
+        rendered = _render_template(template_path, {"date": today, "name": args.name})
+        note_path.write_text(rendered)
+        print(f"Created: {note_path}")
+
+    if args.no_open:
+        return 0
+
+    launched, detail = _open_in_obsidian(note_path)
+    if launched:
+        print(f"Opened in Obsidian: {detail}")
+    else:
+        print(f"note: {detail}", file=sys.stderr)
     return 0
 
 
@@ -1336,6 +1407,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_new.add_argument("--related-subsystems", dest="related_subsystems", default=None, help="CSV subsystem names (plan)")
     p_new.add_argument("--related-spec", dest="related_spec", default=None, help="Related spec path or wikilink (plan)")
     p_new.set_defaults(func=cmd_new)
+
+    p_seed = sub.add_parser(
+        "seed",
+        help="Scaffold an inbox capture (named <name>) and open it in Obsidian",
+    )
+    p_seed.add_argument("name", help="Human-readable name; slugified for the filename")
+    p_seed.add_argument("--vault", default=None, help="Vault path (overrides $LORE_VAULT)")
+    p_seed.add_argument("--no-open", dest="no_open", action="store_true", help="Create the note but don't open Obsidian")
+    p_seed.set_defaults(func=cmd_seed)
 
     def _add_session_selectors(p: argparse.ArgumentParser) -> None:
         """Shared overrides for the auto-detected session note."""
