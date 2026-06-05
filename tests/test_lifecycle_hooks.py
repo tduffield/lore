@@ -168,11 +168,14 @@ class TestEnsureSessionNote:
         assert note1 == note2
 
     def test_creates_fresh_note_when_outside_window(self, tmp_path):
+        # A *different* session arriving outside the resume window gets a fresh
+        # note. (Same-session resume is covered separately — session_id is the
+        # primary resume signal and overrides the window.)
         vault = _make_vault(tmp_path)
         s = load_sessions()
         note1, _ = s.ensure_session_note(
             vault=vault, worktree_name="wt", branch="b", project="p",
-            now_iso=NOW_ISO, now_human=NOW_HUMAN, session_id="sid",
+            now_iso=NOW_ISO, now_human=NOW_HUMAN, session_id="sid-old",
         )
         # Backdate note1 well outside the resume window.
         old = time.time() - (s.RESUME_WINDOW_SECONDS + 60)
@@ -180,6 +183,47 @@ class TestEnsureSessionNote:
         note2, c2 = s.ensure_session_note(
             vault=vault, worktree_name="wt", branch="b", project="p",
             now_iso="2026-06-02T13:00:00Z", now_human="2026-06-02 13:00 UTC",
+            session_id="sid-new",
+        )
+        assert c2 is True
+        assert note1 != note2
+
+    def test_resumes_same_session_id_outside_window(self, tmp_path):
+        # Regression: `camp` resumes via `claude -r <slug>`, preserving the
+        # Claude session_id. Resuming hours later (well past the mtime window)
+        # must reuse the existing note, not fork a duplicate.
+        vault = _make_vault(tmp_path)
+        s = load_sessions()
+        note1, c1 = s.ensure_session_note(
+            vault=vault, worktree_name="wt", branch="b", project="p",
+            now_iso=NOW_ISO, now_human=NOW_HUMAN, session_id="sid",
+        )
+        old = time.time() - (s.RESUME_WINDOW_SECONDS + 3600)
+        os.utime(note1, (old, old))
+        note2, c2 = s.ensure_session_note(
+            vault=vault, worktree_name="wt", branch="b", project="p",
+            now_iso="2026-06-02T16:00:00Z", now_human="2026-06-02 16:00 UTC",
+            session_id="sid",
+        )
+        assert c1 is True
+        assert c2 is False
+        assert note1 == note2
+
+    def test_fresh_note_when_matching_session_is_terminal(self, tmp_path):
+        # An explicit finish/shelve is respected: even if the same session_id
+        # comes back, a terminal note is left alone and a fresh note is created.
+        vault = _make_vault(tmp_path)
+        s = load_sessions()
+        note1, _ = s.ensure_session_note(
+            vault=vault, worktree_name="wt", branch="b", project="p",
+            now_iso=NOW_ISO, now_human=NOW_HUMAN, session_id="sid",
+        )
+        s.finalize_note(note1, ended_iso="2026-06-02T12:30:00Z", status="complete")
+        old = time.time() - (s.RESUME_WINDOW_SECONDS + 60)
+        os.utime(note1, (old, old))
+        note2, c2 = s.ensure_session_note(
+            vault=vault, worktree_name="wt", branch="b", project="p",
+            now_iso="2026-06-02T16:00:00Z", now_human="2026-06-02 16:00 UTC",
             session_id="sid",
         )
         assert c2 is True
