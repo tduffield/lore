@@ -9,6 +9,47 @@ is one sentence; link to an area profile or decision note for depth.
 - **term** — one-sentence definition. See [[areas/...]] for depth.
 -->
 
+## Frontmatter schema
+
+Every note carries a YAML frontmatter block. `type` (the note class — session,
+lesson, deferred, plan, decision, spec, area, dead-end, radar, follow-up,
+design, collaboration, tool, …) is always required and is the first line.
+
+Each type also has required per-type fields (e.g. a `session` needs
+`project`/`worktree`/`branch`/`started`/`ended`; a `lesson` needs
+`date`/`areas`/`phases`/`severity`). The canonical sets live in
+`scripts/frontmatter_schema.py`.
+
+### Groups (opt-in)
+
+`group` is a coarse rollup above the finer `project:` field — the
+product/initiative a note belongs to. It is **opt-in**: create a `.lore-groups`
+file at the vault root listing your allowed groups (one per line; `*` = any
+value), e.g.
+
+    # .lore-groups
+    alpha
+    beta
+
+When that file exists, `group` becomes a required field (the second line),
+values are constrained to the list (blank is always allowed, for one-offs), and
+the pre-commit frontmatter guard turns on. Without it, lore does not require or
+constrain `group`.
+
+### Enforcement
+
+- **`lore validate`** scans the whole vault and reports notes missing required
+  fields, invalid `group` values, and field-name *drift* (e.g. `revisit_when`
+  where the canonical name is `revisit-after`). `--strict` also flags unknown
+  fields.
+- The optional **pre-commit frontmatter guard**
+  (`scripts/frontmatter_validator.py`, enabled by `.lore-groups`) blocks commits
+  that introduce notes missing required frontmatter. Drift is a non-blocking
+  warning.
+
+`status:` is intentionally *not* a required field — it is omitted when unknown
+and its value vocabulary is governed separately (below).
+
 ## Status vocabulary
 
 Each note type has a canonical `status:` set enforced by the status guard
