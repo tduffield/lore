@@ -16,6 +16,7 @@ Subcommands:
                             (omit the target to resume the current session).
   lore sync                 Stage, commit, and push the vault.
   lore review               Generate a vault migration-discipline report.
+  lore validate             Check frontmatter against the canonical schema.
 
 Finds its sibling ../scripts modules at import time so it works whether run
 from the repo or from an installed plugin (${CLAUDE_PLUGIN_ROOT}/cli/lore).
@@ -37,6 +38,8 @@ from urllib.parse import quote
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import frontmatter  # noqa: E402
+import frontmatter_schema as fmschema_mod  # noqa: E402
+import frontmatter_validator as fmval_mod  # noqa: E402
 import harvest as harvest_mod  # noqa: E402
 import link_server  # noqa: E402
 import review as review_mod  # noqa: E402
@@ -1011,6 +1014,86 @@ def cmd_review(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---- validate ---------------------------------------------------------------
+
+# Top-level path components that are not part of the vault note space.
+_NON_NOTE_TOPS = {".claude", ".templates", ".pytest_cache", ".obsidian", ".git", "templates"}
+
+
+def _iter_vault_notes(vault: Path):
+    """Yield tracked note .md paths (relative strings) in the vault.
+
+    Uses `git ls-files` when the vault is a git repo (covers every tracked
+    note dir); falls back to a filesystem walk otherwise. Excludes non-note
+    trees (.claude/, templates/, etc.) and `_`-prefixed files/dirs
+    (_index.md, _daily/, _archive/, _test/). Files with no frontmatter block
+    validate clean, so generated/data files cost nothing.
+    """
+    rc, out, _ = _git(vault, "ls-files", "-z", "*.md")
+    if rc == 0 and out is not None:
+        for rel in out.split("\0"):
+            if not rel:
+                continue
+            parts = rel.split("/")
+            if parts[0] in _NON_NOTE_TOPS:
+                continue
+            if any(p.startswith("_") for p in parts):
+                continue
+            yield rel
+        return
+    # Non-git fallback: walk note dirs.
+    for top in sorted(vault.iterdir()):
+        if not top.is_dir() or top.name in _NON_NOTE_TOPS or top.name.startswith("."):
+            continue
+        for p in top.rglob("*.md"):
+            if any(part.startswith("_") for part in p.relative_to(vault).parts):
+                continue
+            yield str(p.relative_to(vault))
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    """Validate vault frontmatter against the canonical schema.
+
+    Reports notes missing required fields (type / group / per-type required)
+    or carrying an invalid group, plus field-name drift warnings. With
+    --strict, also reports unknown fields. Exits 1 when any error is found
+    (warnings alone exit 0), so it doubles as a CI / pre-push check.
+    """
+    vault = Path(vault_mod.resolve_vault())
+    if not vault.exists():
+        print(f"error: vault not found: {vault}", file=sys.stderr)
+        return 1
+
+    strict = getattr(args, "strict", False)
+    require_group, allowed_groups = fmschema_mod.group_config(vault)
+    errors: list[str] = []
+    warnings: list[str] = []
+    checked = 0
+    for rel in _iter_vault_notes(vault):
+        checked += 1
+        for issue in fmval_mod.validate_file(
+            vault / rel, require_group=require_group,
+            allowed_groups=allowed_groups, strict=strict,
+        ):
+            line = f"  {rel}: {issue.message}"
+            (errors if issue.severity == fmval_mod.ERROR else warnings).append(line)
+
+    if errors:
+        print(f"Errors ({len(errors)}):")
+        for e in errors:
+            print(e)
+        print()
+    if warnings:
+        print(f"Drift warnings ({len(warnings)}):")
+        for w in warnings:
+            print(w)
+        print()
+
+    status = "FAIL" if errors else "ok"
+    print(f"{status}: {checked} notes checked, {len(errors)} error(s), {len(warnings)} warning(s)")
+    return 1 if errors else 0
+
+
 # ---- stats ------------------------------------------------------------------
 
 def _count(directory: Path, predicate, recursive: bool = False) -> int:
@@ -1485,6 +1568,17 @@ def build_parser() -> argparse.ArgumentParser:
              "Default: since the most recent review note, or 7 days ago.",
     )
     p_review.set_defaults(func=cmd_review)
+
+    p_validate = sub.add_parser(
+        "validate",
+        help="Validate vault frontmatter against the canonical schema",
+    )
+    p_validate.add_argument(
+        "--strict",
+        action="store_true",
+        help="Also warn on unknown (non-schema) fields, not just known drift.",
+    )
+    p_validate.set_defaults(func=cmd_validate)
 
     return parser
 
